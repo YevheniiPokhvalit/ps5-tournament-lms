@@ -502,11 +502,7 @@ app.post('/api/tournaments', async (req, res) => {
 // PUT /api/matches/:id - Submit score, record goals, and award coins
 app.put('/api/matches/:id', async (req, res) => {
   const { id } = req.params;
-  const { score1, score2, goals, player1_advanced, player2_advanced } = req.body;
-
-  if (score1 === undefined || score2 === undefined) {
-    return res.status(400).json({ error: 'score1 and score2 are required' });
-  }
+  const { score1, score2, status, goals, player1_advanced, player2_advanced } = req.body;
 
   const client = await pool.connect();
   try {
@@ -518,6 +514,30 @@ app.put('/api/matches/:id', async (req, res) => {
       return res.status(404).json({ error: 'Match not found' });
     }
     const match = matchRes.rows[0];
+
+    // Determine target status
+    const targetStatus = status || 'completed';
+
+    if (targetStatus === 'live') {
+      // Just start the match
+      await client.query(`
+        UPDATE matches
+        SET score1 = NULL, score2 = NULL, status = 'live'
+        WHERE id = $1;
+      `, [id]);
+
+      await client.query('COMMIT');
+      return res.json({ message: 'Match started (Live)', matchId: id });
+    }
+
+    // Otherwise, we are completing the match
+    if (score1 === undefined || score1 === null || isNaN(parseInt(score1)) ||
+        score2 === undefined || score2 === null || isNaN(parseInt(score2))) {
+      return res.status(400).json({ error: 'Valid score1 and score2 are required to complete a match' });
+    }
+
+    const s1 = parseInt(score1);
+    const s2 = parseInt(score2);
 
     // 2. Fetch human player names
     const p1Res = await client.query('SELECT name FROM players WHERE id = $1;', [match.current_player1_id]);
@@ -555,7 +575,7 @@ app.put('/api/matches/:id', async (req, res) => {
       UPDATE matches
       SET score1 = $1, score2 = $2, status = 'completed'
       WHERE id = $3;
-    `, [parseInt(score1), parseInt(score2), id]);
+    `, [s1, s2, id]);
 
     // 5. Clear and record goals
     await client.query('DELETE FROM goals WHERE match_id = $1;', [id]);
@@ -580,9 +600,9 @@ app.put('/api/matches/:id', async (req, res) => {
     let p2Reward = 0;
 
     // Match outcome
-    if (parseInt(score1) > parseInt(score2)) {
+    if (s1 > s2) {
       p1Reward += 60;
-    } else if (parseInt(score2) > parseInt(score1)) {
+    } else if (s2 > s1) {
       p2Reward += 60;
     } else {
       p1Reward += 20;
@@ -590,8 +610,8 @@ app.put('/api/matches/:id', async (req, res) => {
     }
 
     // Clean sheet (+10 coins if conceded 0)
-    if (parseInt(score2) === 0) p1Reward += 10;
-    if (parseInt(score1) === 0) p2Reward += 10;
+    if (s2 === 0) p1Reward += 10;
+    if (s1 === 0) p2Reward += 10;
 
     // Playoff qualification (+50 coins)
     if (player1_advanced === true) p1Reward += 50;
@@ -605,7 +625,7 @@ app.put('/api/matches/:id', async (req, res) => {
 
     res.json({
       message: 'Match results submitted successfully',
-      score: { team1: score1, team2: score2 },
+      score: { team1: s1, team2: s2 },
       rewards: {
         [player1Name]: { coinsAdded: p1Reward },
         [player2Name]: { coinsAdded: p2Reward }
