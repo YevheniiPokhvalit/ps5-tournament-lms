@@ -1,0 +1,1766 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Gamepad2, 
+  Trophy, 
+  Settings, 
+  Image as ImageIcon, 
+  Plus, 
+  Trash2, 
+  Edit3, 
+  Play, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Download, 
+  Users, 
+  Layers, 
+  RefreshCw,
+  Coins
+} from 'lucide-react';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5050';
+
+function App() {
+  const [activeTab, setActiveTab] = useState('match-center');
+  
+  // Shared state
+  const [players, setPlayers] = useState([]);
+  const [teams, setTeams] = useState({}); // Grouped by league
+  const [flatTeams, setFlatTeams] = useState([]); // Flat list of teams
+  const [tournaments, setTournaments] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [stats, setStats] = useState(null);
+  
+  // Loading & error state
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
+
+  // Form states
+  // 1. Create team
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamLeague, setNewTeamLeague] = useState('Premier League');
+  const [newTeamAttack, setNewTeamAttack] = useState(80);
+  const [newTeamMidfield, setNewTeamMidfield] = useState(80);
+  const [newTeamDefense, setNewTeamDefense] = useState(80);
+  const [newTeamOverall, setNewTeamOverall] = useState(80);
+  const [newTeamRoster, setNewTeamRoster] = useState('');
+
+  // 2. Edit team players
+  const [selectedTeamForPlayers, setSelectedTeamForPlayers] = useState('');
+  const [teamPlayersList, setTeamPlayersList] = useState([]);
+  const [newPlayerRosterName, setNewPlayerRosterName] = useState('');
+
+  // 3. Tournament constructor
+  const [tournamentName, setTournamentName] = useState('');
+  const [tourneyPlayers, setTourneyPlayers] = useState(['Alex', 'Max', 'Dmytro', 'Yaroslav']);
+  const [tourneyN, setTourneyN] = useState(1);
+  const [tourneyType, setTourneyType] = useState('Groups+Playoff');
+  const [selectedTeamIds, setSelectedTeamIds] = useState([]);
+  const [selectedLeagueTab, setSelectedLeagueTab] = useState('');
+
+  // 4. Close match modal/form
+  const [activeClosingMatch, setActiveClosingMatch] = useState(null);
+  const [score1, setScore1] = useState(0);
+  const [score2, setScore2] = useState(0);
+  const [matchGoals, setMatchGoals] = useState([]); // [{ team_id, scorer_id, assistant_id, minute }]
+  const [player1Advanced, setPlayer1Advanced] = useState(false);
+  const [player2Advanced, setPlayer2Advanced] = useState(false);
+  const [competingPlayers, setCompetingPlayers] = useState({ team1: [], team2: [] });
+
+  // 5. Transfer playoff team
+  const [transferMatchId, setTransferMatchId] = useState('');
+  const [transferTeamId, setTransferTeamId] = useState('');
+  const [transferNewPlayerId, setTransferNewPlayerId] = useState('');
+
+  // 6. Canvas banner generator
+  const canvasRef = useRef(null);
+  const [bannerMatchId, setBannerMatchId] = useState('');
+  const [bannerTeam1, setBannerTeam1] = useState('Team A');
+  const [bannerTeam2, setBannerTeam2] = useState('Team B');
+  const [bannerPlayer1, setBannerPlayer1] = useState('Player 1');
+  const [bannerPlayer2, setBannerPlayer2] = useState('Player 2');
+
+  // Fetch initial data
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 1. Fetch health/players
+      const playersRes = await fetch(`${API_URL}/api/players`);
+      const playersData = await playersRes.json();
+      setPlayers(playersData);
+
+      // 2. Fetch teams (grouped)
+      const teamsRes = await fetch(`${API_URL}/api/teams`);
+      const teamsData = await teamsRes.json();
+      setTeams(teamsData);
+
+      // Flatten teams for quick selection/lookup
+      const flat = [];
+      Object.keys(teamsData).forEach(league => {
+        flat.push(...teamsData[league]);
+      });
+      setFlatTeams(flat);
+      if (flat.length > 0 && !selectedTeamForPlayers) {
+        setSelectedTeamForPlayers(flat[0].id.toString());
+      }
+      
+      // Setup initial league tab
+      const leagues = Object.keys(teamsData);
+      if (leagues.length > 0 && !selectedLeagueTab) {
+        setSelectedLeagueTab(leagues[0]);
+      }
+
+      // 3. Fetch tournaments
+      const tournamentsRes = await fetch(`${API_URL}/api/tournaments`);
+      const tournamentsData = await tournamentsRes.json();
+      setTournaments(tournamentsData);
+
+      // 4. Fetch matches
+      const matchesRes = await fetch(`${API_URL}/api/matches`);
+      const matchesData = await matchesRes.json();
+      setMatches(matchesData);
+
+      // 5. Fetch stats
+      const statsRes = await fetch(`${API_URL}/api/stats`);
+      const statsData = await statsRes.json();
+      setStats(statsData);
+
+    } catch (err) {
+      console.error(err);
+      setError('Помилка завантаження даних із сервера. Перевірте, чи працює бекенд.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // Fetch players for selected team in editor
+  useEffect(() => {
+    if (selectedTeamForPlayers) {
+      fetch(`${API_URL}/api/teams/${selectedTeamForPlayers}/players`)
+        .then(res => res.json())
+        .then(data => setTeamPlayersList(data))
+        .catch(err => console.error(err));
+    }
+  }, [selectedTeamForPlayers]);
+
+  // Redraw banner when details change
+  useEffect(() => {
+    if (activeTab === 'banner-gen') {
+      drawBanner();
+    }
+  }, [bannerTeam1, bannerTeam2, bannerPlayer1, bannerPlayer2, activeTab]);
+
+  // Flash message helpers
+  const triggerSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 4000);
+  };
+
+  const triggerError = (msg) => {
+    setError(msg);
+    setTimeout(() => setError(null), 5000);
+  };
+
+  // =========================================================================
+  // ACTIONS
+  // =========================================================================
+
+  // 1. Create team
+  const handleCreateTeam = async (e) => {
+    e.preventDefault();
+    if (!newTeamName) return triggerError('Введіть назву команди');
+    
+    setLoading(true);
+    try {
+      const playersArray = newTeamRoster
+        ? newTeamRoster.split(',').map(p => p.trim()).filter(p => p !== '')
+        : [];
+      
+      const res = await fetch(`${API_URL}/api/teams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTeamName,
+          league: newTeamLeague,
+          attack: newTeamAttack,
+          midfield: newTeamMidfield,
+          defense: newTeamDefense,
+          overall: newTeamOverall,
+          players: playersArray
+        })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Не вдалося створити команду');
+      
+      triggerSuccess(`Команду "${data.name}" успішно створено!`);
+      setNewTeamName('');
+      setNewTeamRoster('');
+      fetchData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. Add player to team roster
+  const handleAddPlayerToRoster = async (e) => {
+    e.preventDefault();
+    if (!newPlayerRosterName || !selectedTeamForPlayers) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/teams/${selectedTeamForPlayers}/players`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newPlayerRosterName })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setTeamPlayersList([...teamPlayersList, data]);
+      setNewPlayerRosterName('');
+      triggerSuccess('Футболіста успішно додано до складу!');
+    } catch (err) {
+      triggerError(err.message);
+    }
+  };
+
+  // 3. Delete player from roster
+  const handleDeletePlayerFromRoster = async (playerId) => {
+    try {
+      const res = await fetch(`${API_URL}/api/team-players/${playerId}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Помилка видалення');
+      setTeamPlayersList(teamPlayersList.filter(p => p.id !== playerId));
+      triggerSuccess('Футболіста видалено зі складу!');
+    } catch (err) {
+      triggerError(err.message);
+    }
+  };
+
+  // 4. Delete team
+  const handleDeleteTeam = async (teamId) => {
+    if (!window.confirm('Ви впевнені, що хочете видалити команду? Склад команди буде видалено каскадно.')) return;
+    try {
+      const res = await fetch(`${API_URL}/api/teams/${teamId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      triggerSuccess('Команду успішно видалено!');
+      fetchData();
+    } catch (err) {
+      triggerError(err.message);
+    }
+  };
+
+  // 5. Select team in tournament builder
+  const toggleTeamSelection = (teamId) => {
+    const limit = 4 * tourneyN;
+    if (selectedTeamIds.includes(teamId)) {
+      setSelectedTeamIds(selectedTeamIds.filter(id => id !== teamId));
+    } else {
+      if (selectedTeamIds.length >= limit) {
+        triggerError(`Ви вже вибрали максимум команд (${limit}) для N = ${tourneyN}`);
+        return;
+      }
+      setSelectedTeamIds([...selectedTeamIds, teamId]);
+    }
+  };
+
+  // 6. Generate Tournament
+  const handleGenerateTournament = async () => {
+    const limit = 4 * tourneyN;
+    if (!tournamentName) return triggerError('Введіть назву турніру');
+    if (selectedTeamIds.length !== limit) {
+      return triggerError(`Будь ласка, оберіть рівно ${limit} команд (вибрано ${selectedTeamIds.length})`);
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/tournaments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: tournamentName,
+          playerNames: tourneyPlayers,
+          type: tourneyType,
+          N: tourneyN,
+          teamIds: selectedTeamIds
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      triggerSuccess(`Турнір успішно згенеровано! Створено ${data.matchesCount} матчів.`);
+      setTournamentName('');
+      setSelectedTeamIds([]);
+      setActiveTab('match-center');
+      fetchData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 7. Open match closer window
+  const openCloseMatchModal = async (match) => {
+    setActiveClosingMatch(match);
+    setScore1(0);
+    setScore2(0);
+    setMatchGoals([]);
+    setPlayer1Advanced(false);
+    setPlayer2Advanced(false);
+
+    try {
+      // Fetch squads for both competing teams
+      const [squad1Res, squad2Res] = await Promise.all([
+        fetch(`${API_URL}/api/teams/${match.team1_id}/players`),
+        fetch(`${API_URL}/api/teams/${match.team2_id}/players`)
+      ]);
+      const squad1 = await squad1Res.json();
+      const squad2 = await squad2Res.json();
+      setCompetingPlayers({ team1: squad1, team2: squad2 });
+    } catch (err) {
+      console.error(err);
+      triggerError('Не вдалося завантажити склади команд для протоколу.');
+    }
+  };
+
+  // 8. Add goal row in modal
+  const addGoalRow = (teamId) => {
+    setMatchGoals([...matchGoals, { team_id: teamId, scorer_id: '', assistant_id: '', minute: '' }]);
+  };
+
+  const updateGoalRow = (index, field, value) => {
+    const updated = [...matchGoals];
+    updated[index][field] = value ? parseInt(value) : '';
+    setMatchGoals(updated);
+  };
+
+  const removeGoalRow = (index) => {
+    setMatchGoals(matchGoals.filter((_, i) => i !== index));
+  };
+
+  // 9. Submit match score
+  const handleSubmitMatchResult = async (e) => {
+    e.preventDefault();
+    if (!activeClosingMatch) return;
+
+    // Validate goals (ensure scorer is selected)
+    for (const g of matchGoals) {
+      if (!g.scorer_id) {
+        return triggerError('Для кожного забитого голу необхідно вказати автора!');
+      }
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/matches/${activeClosingMatch.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          score1: parseInt(score1),
+          score2: parseInt(score2),
+          goals: matchGoals,
+          player1_advanced: player1Advanced,
+          player2_advanced: player2Advanced
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      triggerSuccess('Результат матчу успішно записано! Гравцям нараховано коїни.');
+      setActiveClosingMatch(null);
+      fetchData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 10. Transfer playoff team control
+  const handleTransferPlayoffTeam = async (e) => {
+    e.preventDefault();
+    if (!transferMatchId || !transferTeamId || !transferNewPlayerId) {
+      return triggerError('Заповніть усі поля для передачі контролю');
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/matches/${transferMatchId}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          team_id: parseInt(transferTeamId),
+          new_player_id: parseInt(transferNewPlayerId)
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      triggerSuccess('Керування командою на цей матч успішно передано!');
+      setTransferMatchId('');
+      setTransferTeamId('');
+      setTransferNewPlayerId('');
+      fetchData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 11. Draw match banner to Canvas
+  const drawBanner = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    // Set Dimensions (perfect 16:9 ratio for mobile sharing)
+    canvas.width = 800;
+    canvas.height = 450;
+
+    // Background Radial Gradient
+    const gradient = ctx.createRadialGradient(400, 225, 50, 400, 225, 450);
+    gradient.addColorStop(0, '#131520');
+    gradient.addColorStop(1, '#08090e');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 800, 450);
+
+    // PlayStation blue glow stripe on left, magenta glow stripe on right
+    ctx.fillStyle = 'rgba(0, 111, 205, 0.2)';
+    ctx.fillRect(0, 0, 10, 450);
+    ctx.fillStyle = 'rgba(255, 0, 127, 0.2)';
+    ctx.fillRect(790, 0, 10, 450);
+
+    // Playstation grid background decoration
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.03)';
+    ctx.lineWidth = 1;
+    for (let i = 40; i < 800; i += 40) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 450); ctx.stroke();
+    }
+    for (let i = 40; i < 450; i += 40) {
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(800, i); ctx.stroke();
+    }
+
+    // PlayStation Symbols decoration (Cross, Circle, Triangle, Square) in corners
+    ctx.lineWidth = 3;
+    
+    // Triangle (Top-Left)
+    ctx.strokeStyle = 'rgba(0, 255, 136, 0.1)';
+    ctx.beginPath();
+    ctx.moveTo(80, 50); ctx.lineTo(120, 110); ctx.lineTo(40, 110);
+    ctx.closePath(); ctx.stroke();
+
+    // Circle (Bottom-Left)
+    ctx.strokeStyle = 'rgba(255, 0, 127, 0.1)';
+    ctx.beginPath();
+    ctx.arc(80, 360, 30, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Square (Top-Right)
+    ctx.strokeStyle = 'rgba(255, 204, 0, 0.1)';
+    ctx.strokeRect(680, 50, 50, 50);
+
+    // Cross (Bottom-Right)
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.1)';
+    ctx.beginPath();
+    ctx.moveTo(680, 340); ctx.lineTo(730, 390);
+    ctx.moveTo(730, 340); ctx.lineTo(680, 390);
+    ctx.stroke();
+
+    // Tournament Subheader
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = 'bold 13px Outfit, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PS5 CYBERFOOTBALL CHAMPIONSHIP', 400, 60);
+
+    // Match Card box
+    ctx.fillStyle = 'rgba(18, 20, 31, 0.7)';
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(150, 100, 500, 250, 15);
+    ctx.fill();
+    ctx.stroke();
+
+    // VS Text in center
+    ctx.fillStyle = '#00f0ff';
+    ctx.font = '800 54px Outfit, sans-serif';
+    ctx.shadowColor = 'rgba(0, 240, 255, 0.6)';
+    ctx.shadowBlur = 10;
+    ctx.fillText('VS', 400, 230);
+    ctx.shadowBlur = 0; // reset
+
+    // Team 1 Name (Left)
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '800 32px Outfit, sans-serif';
+    ctx.fillText(bannerTeam1.toUpperCase(), 340, 210);
+
+    // Player 1 Name (Left)
+    ctx.fillStyle = '#00f0ff';
+    ctx.font = '600 18px Outfit, sans-serif';
+    ctx.fillText(bannerPlayer1, 340, 245);
+
+    // Team 2 Name (Right)
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '800 32px Outfit, sans-serif';
+    ctx.fillText(bannerTeam2.toUpperCase(), 460, 210);
+
+    // Player 2 Name (Right)
+    ctx.fillStyle = '#ff007f';
+    ctx.font = '600 18px Outfit, sans-serif';
+    ctx.fillText(bannerPlayer2, 460, 245);
+
+    // Footer Text
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.font = '12px Outfit, sans-serif';
+    ctx.fillText('DOWNLOADED FROM PS5 LEAGUE MANAGER', 400, 410);
+  };
+
+  const handleSelectBannerMatch = (matchId) => {
+    setBannerMatchId(matchId);
+    const m = matches.find(x => x.id === parseInt(matchId));
+    if (m) {
+      setBannerTeam1(m.team1_name);
+      setBannerTeam2(m.team2_name);
+      setBannerPlayer1(m.player1_name);
+      setBannerPlayer2(m.player2_name);
+    }
+  };
+
+  const downloadBannerImage = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const url = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = `match_banner_${bannerPlayer1}_vs_${bannerPlayer2}.png`;
+    link.href = url;
+    link.click();
+  };
+
+  // =========================================================================
+  // RENDER HELPERS
+  // =========================================================================
+
+  // Live Match
+  const liveMatch = matches.find(m => m.status === 'live');
+  const pendingMatches = matches.filter(m => m.status === 'pending');
+  const completedMatches = matches.filter(m => m.status === 'completed');
+
+  // Stats tab selection
+  const [activeStatsTab, setActiveStatsTab] = useState('tables');
+
+  return (
+    <div className="min-h-screen bg-ps-dark text-gray-100 flex flex-col max-w-md mx-auto relative border-x border-ps-dark-item shadow-2xl">
+      
+      {/* HEADER */}
+      <header className="sticky top-0 bg-ps-dark-card border-b border-ps-dark-item p-4 flex items-center justify-between z-10">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-ps-blue flex items-center justify-center font-bold text-white shadow-neon-blue">
+            PS
+          </div>
+          <div>
+            <h1 className="font-extrabold text-sm uppercase tracking-wider text-white neon-glow-text-blue">
+              Cyber League
+            </h1>
+            <span className="text-[10px] text-gray-400">PS5 Tournament LMS</span>
+          </div>
+        </div>
+        <button 
+          onClick={fetchData} 
+          disabled={loading}
+          className="p-2 rounded-full hover:bg-ps-dark-item text-ps-neon-blue transition-colors disabled:opacity-50"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </header>
+
+      {/* FLASH MESSAGES */}
+      {successMsg && (
+        <div className="absolute top-16 left-4 right-4 bg-ps-green/20 border border-ps-green text-ps-green px-4 py-3 rounded-lg text-xs font-semibold flex items-center gap-2 z-50 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+      {error && (
+        <div className="absolute top-16 left-4 right-4 bg-ps-neon-pink/20 border border-ps-neon-pink text-white px-4 py-3 rounded-lg text-xs font-semibold flex items-center gap-2 z-50">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-ps-neon-pink" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* MAIN CONTAINER */}
+      <main className="flex-1 p-4 pb-24 overflow-y-auto">
+        
+        {/* ========================================================================= */}
+        {/* TAB 1: MATCH CENTER */}
+        {/* ========================================================================= */}
+        {activeTab === 'match-center' && (
+          <div className="space-y-6">
+            
+            {/* NOW PLAYING BILLBOARD */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Зараз Грають</h2>
+                {liveMatch && (
+                  <span className="bg-ps-green/10 border border-ps-green text-ps-green text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest animate-neon-pulse flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-ps-green animate-ping"></span> Live
+                  </span>
+                )}
+              </div>
+              
+              {liveMatch ? (
+                <div className="bg-ps-dark-card border border-ps-neon-blue rounded-2xl p-5 shadow-neon-blue relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-ps-neon-blue/10 to-transparent rounded-bl-full pointer-events-none"></div>
+                  
+                  <div className="text-center text-[10px] text-ps-neon-blue font-bold uppercase tracking-widest mb-3">
+                    {liveMatch.stage}
+                  </div>
+
+                  <div className="grid grid-cols-5 items-center gap-2">
+                    {/* Team 1 */}
+                    <div className="col-span-2 text-center">
+                      <div className="w-12 h-12 mx-auto rounded-xl bg-ps-blue/20 border border-ps-blue/40 flex items-center justify-center font-bold text-white text-lg mb-2">
+                        {liveMatch.team1_name.slice(0,2).toUpperCase()}
+                      </div>
+                      <h3 className="font-bold text-sm text-white truncate">{liveMatch.team1_name}</h3>
+                      <p className="text-[10px] text-gray-400 mt-0.5 truncate">{liveMatch.player1_name}</p>
+                    </div>
+
+                    {/* Score */}
+                    <div className="col-span-1 text-center">
+                      <div className="font-extrabold text-2xl text-ps-neon-blue neon-glow-text-blue">
+                        {liveMatch.score1 !== null ? liveMatch.score1 : 0} : {liveMatch.score2 !== null ? liveMatch.score2 : 0}
+                      </div>
+                    </div>
+
+                    {/* Team 2 */}
+                    <div className="col-span-2 text-center">
+                      <div className="w-12 h-12 mx-auto rounded-xl bg-ps-neon-pink/20 border border-ps-neon-pink/40 flex items-center justify-center font-bold text-white text-lg mb-2">
+                        {liveMatch.team2_name.slice(0,2).toUpperCase()}
+                      </div>
+                      <h3 className="font-bold text-sm text-white truncate">{liveMatch.team2_name}</h3>
+                      <p className="text-[10px] text-gray-400 mt-0.5 truncate">{liveMatch.player2_name}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Actions for Live Match */}
+                  <div className="mt-4 pt-4 border-t border-ps-dark-item flex gap-2">
+                    <button 
+                      onClick={() => openCloseMatchModal(liveMatch)}
+                      className="flex-1 bg-ps-neon-blue/10 border border-ps-neon-blue/40 hover:bg-ps-neon-blue hover:text-black text-ps-neon-blue text-xs font-bold py-2 px-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Закрити матч
+                    </button>
+                  </div>
+                </div>
+              ) : pendingMatches.length > 0 ? (
+                // If no active live match, show next match as spotlight card with option to start
+                <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-5 relative overflow-hidden">
+                  <div className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-3">
+                    Наступний матч програми
+                  </div>
+
+                  <div className="grid grid-cols-5 items-center gap-2">
+                    {/* Team 1 */}
+                    <div className="col-span-2 text-center opacity-70">
+                      <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2">
+                        {pendingMatches[0].team1_name.slice(0,2).toUpperCase()}
+                      </div>
+                      <h3 className="font-bold text-sm text-white truncate">{pendingMatches[0].team1_name}</h3>
+                      <p className="text-[10px] text-gray-400 mt-0.5 truncate">{pendingMatches[0].player1_name}</p>
+                    </div>
+
+                    {/* VS */}
+                    <div className="col-span-1 text-center">
+                      <div className="font-extrabold text-lg text-gray-500">VS</div>
+                    </div>
+
+                    {/* Team 2 */}
+                    <div className="col-span-2 text-center opacity-70">
+                      <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2">
+                        {pendingMatches[0].team2_name.slice(0,2).toUpperCase()}
+                      </div>
+                      <h3 className="font-bold text-sm text-white truncate">{pendingMatches[0].team2_name}</h3>
+                      <p className="text-[10px] text-gray-400 mt-0.5 truncate">{pendingMatches[0].player2_name}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-ps-dark-item">
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`${API_URL}/api/matches/${pendingMatches[0].id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ score1: null, score2: null, status: 'live' }) // Change to live without scores
+                          });
+                          if (!res.ok) throw new Error('Помилка активації');
+                          triggerSuccess('Матч запущено в ефір!');
+                          fetchData();
+                        } catch (err) {
+                          triggerError(err.message);
+                        }
+                      }}
+                      className="w-full bg-ps-blue hover:bg-ps-blue/90 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-neon-blue transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Play className="w-4 h-4 fill-white" /> РОЗПОЧАТИ МАТЧ
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-ps-dark-card border border-ps-dark-item border-dashed rounded-2xl p-8 text-center text-gray-500">
+                  <Gamepad2 className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+                  <p className="text-xs">Наразі немає запланованих матчів.</p>
+                  <p className="text-[10px] mt-1 text-ps-neon-blue">Перейдіть в панель адміна та згенеруйте новий турнір!</p>
+                </div>
+              )}
+            </div>
+
+            {/* NEXT IN LINE (QUEUE) */}
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Наступні в черзі</h2>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {pendingMatches.slice(liveMatch ? 0 : 1).map((match, index) => (
+                  <div key={match.id} className="bg-ps-dark-card border border-ps-dark-item hover:border-ps-blue/30 rounded-xl p-3 flex items-center justify-between gap-2 transition-all">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="text-[10px] font-bold text-gray-500 w-5 text-center shrink-0">
+                        #{index + (liveMatch ? 1 : 2)}
+                      </div>
+                      
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between text-xs font-bold text-white mb-0.5">
+                          <span className="truncate">{match.team1_name}</span>
+                          <span className="text-gray-500 mx-2 shrink-0">vs</span>
+                          <span className="truncate text-right">{match.team2_name}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] text-gray-400">
+                          <span className="truncate">{match.player1_name}</span>
+                          <span className="text-ps-neon-blue shrink-0 uppercase text-[8px] tracking-wider">{match.stage}</span>
+                          <span className="truncate text-right">{match.player2_name}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <button 
+                      onClick={() => {
+                        // Switch status of this match to live directly
+                        fetch(`${API_URL}/api/matches/${match.id}`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ score1: null, score2: null, status: 'live' })
+                        })
+                        .then(() => {
+                          triggerSuccess('Матч виведено в Live!');
+                          fetchData();
+                        })
+                        .catch(err => triggerError(err.message));
+                      }}
+                      className="p-1.5 rounded-lg bg-ps-dark-item hover:bg-ps-blue text-ps-neon-blue hover:text-white transition-all shrink-0"
+                      title="Запустити"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                
+                {pendingMatches.length === 0 && (
+                  <div className="text-center text-xs text-gray-600 py-4 bg-ps-dark-card/50 rounded-xl border border-ps-dark-item border-dashed">
+                    Черга пуста
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* MATCH HISTORY */}
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Історія матчів</h2>
+              <div className="space-y-2">
+                {completedMatches.map(match => (
+                  <div key={match.id} className="bg-ps-dark-card border border-ps-dark-item rounded-xl p-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">{match.stage}</span>
+                      <span className="text-[9px] text-gray-500">
+                        {new Date(match.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-7 items-center gap-1 text-xs">
+                      {/* Team 1 */}
+                      <div className="col-span-2 text-right truncate">
+                        <span className="font-bold text-white block truncate">{match.team1_name}</span>
+                        <span className="text-[9px] text-gray-400 block truncate">{match.player1_name}</span>
+                      </div>
+                      
+                      {/* Score */}
+                      <div className="col-span-3 text-center flex items-center justify-center gap-2">
+                        <div className="px-2 py-0.5 rounded bg-ps-dark-item border border-ps-dark-item font-extrabold text-white">
+                          {match.score1}
+                        </div>
+                        <span className="text-gray-500 font-bold">:</span>
+                        <div className="px-2 py-0.5 rounded bg-ps-dark-item border border-ps-dark-item font-extrabold text-white">
+                          {match.score2}
+                        </div>
+                      </div>
+
+                      {/* Team 2 */}
+                      <div className="col-span-2 text-left truncate">
+                        <span className="font-bold text-white block truncate">{match.team2_name}</span>
+                        <span className="text-[9px] text-gray-400 block truncate">{match.player2_name}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {completedMatches.length === 0 && (
+                  <div className="text-center text-xs text-gray-600 py-4">
+                    Немає зіграних матчів.
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: STATS & STANDINGS */}
+        {/* ========================================================================= */}
+        {activeTab === 'stats' && (
+          <div className="space-y-6">
+            
+            {/* SUB-TABS */}
+            <div className="flex border-b border-ps-dark-item p-0.5 bg-ps-dark-card rounded-xl">
+              <button
+                onClick={() => setActiveStatsTab('tables')}
+                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
+                  activeStatsTab === 'tables' 
+                    ? 'bg-ps-blue text-white shadow-neon-blue' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Турнірна Таблиця
+              </button>
+              <button
+                onClick={() => setActiveStatsTab('scorers')}
+                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
+                  activeStatsTab === 'scorers' 
+                    ? 'bg-ps-blue text-white shadow-neon-blue' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Бомбардири
+              </button>
+              <button
+                onClick={() => setActiveStatsTab('coins')}
+                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
+                  activeStatsTab === 'coins' 
+                    ? 'bg-ps-blue text-white shadow-neon-blue' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Рейтинг Коїнів
+              </button>
+            </div>
+
+            {/* TAB: TABLES & STANDINGS */}
+            {activeStatsTab === 'tables' && (
+              <div className="space-y-6">
+                {stats?.groupStandings && Object.keys(stats.groupStandings).length > 0 ? (
+                  Object.keys(stats.groupStandings).map(groupName => (
+                    <div key={groupName} className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                      <h3 className="text-xs font-extrabold uppercase tracking-widest text-ps-neon-blue mb-3">
+                        {groupName}
+                      </h3>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[11px] text-left">
+                          <thead>
+                            <tr className="text-gray-500 border-b border-ps-dark-item pb-2 uppercase text-[9px] tracking-wider">
+                              <th className="py-1.5 font-bold">Команда</th>
+                              <th className="py-1.5 font-bold text-center w-8">І</th>
+                              <th className="py-1.5 font-bold text-center w-8">РМ</th>
+                              <th className="py-1.5 font-bold text-center w-8">О</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {stats.groupStandings[groupName].map((team, idx) => (
+                              <tr 
+                                key={team.id} 
+                                className={`border-b border-ps-dark-item/50 last:border-b-0 ${
+                                  idx < 2 ? 'bg-ps-blue/5' : ''
+                                }`}
+                              >
+                                <td className="py-2.5 pr-2 font-bold max-w-[120px] truncate text-white">
+                                  <div className="truncate">{team.name}</div>
+                                  <div className="text-[9px] text-gray-500 font-normal truncate">{team.player_name}</div>
+                                </td>
+                                <td className="py-2.5 text-center font-semibold text-gray-300">{team.played}</td>
+                                <td className="py-2.5 text-center text-gray-400 font-semibold">
+                                  {team.gd > 0 ? `+${team.gd}` : team.gd}
+                                </td>
+                                <td className={`py-2.5 text-center font-bold text-sm ${idx < 2 ? 'text-ps-neon-blue' : 'text-white'}`}>
+                                  {team.points}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))
+                ) : stats?.playoffMatches && stats.playoffMatches.length > 0 ? (
+                  <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                    <h3 className="text-xs font-extrabold uppercase tracking-widest text-ps-neon-pink mb-3">
+                      Сітка Плей-оф (Playoffs)
+                    </h3>
+                    <div className="space-y-3">
+                      {stats.playoffMatches.map(m => (
+                        <div key={m.id} className="bg-ps-dark-item border border-ps-dark-item rounded-xl p-3 text-xs">
+                          <div className="text-[9px] font-bold text-ps-neon-pink uppercase mb-2">{m.stage}</div>
+                          
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold text-white truncate max-w-[140px]">
+                              {m.team1_name} <span className="text-[9px] text-gray-400 font-normal">({m.player1_name})</span>
+                            </span>
+                            <span className="font-extrabold text-sm text-ps-neon-blue">
+                              {m.status === 'completed' ? m.score1 : '-'}
+                            </span>
+                          </div>
+                          
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-white truncate max-w-[140px]">
+                              {m.team2_name} <span className="text-[9px] text-gray-400 font-normal">({m.player2_name})</span>
+                            </span>
+                            <span className="font-extrabold text-sm text-ps-neon-blue">
+                              {m.status === 'completed' ? m.score2 : '-'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center text-xs text-gray-500 py-8 bg-ps-dark-card rounded-2xl border border-ps-dark-item">
+                    Дані статистики недоступні. Спочатку створіть турнір!
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: SCORERS & ASSISTANTS */}
+            {activeStatsTab === 'scorers' && (
+              <div className="grid grid-cols-1 gap-6">
+                {/* Scorers */}
+                <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue mb-3">
+                    ⚽ Золота Бутса (Бомбардири)
+                  </h3>
+                  
+                  <div className="space-y-2">
+                    {stats?.topScorers && stats.topScorers.length > 0 ? (
+                      stats.topScorers.map((player, idx) => (
+                        <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2 last:border-b-0 text-xs">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded bg-ps-dark-item text-[10px] font-bold text-gray-400 flex items-center justify-center">
+                              {idx + 1}
+                            </div>
+                            <div>
+                              <div className="font-bold text-white">{player.player_name}</div>
+                              <div className="text-[9px] text-gray-400">{player.team_name}</div>
+                            </div>
+                          </div>
+                          <div className="font-extrabold text-ps-neon-blue text-sm">
+                            {player.goals_count} <span className="text-[9px] font-normal text-gray-500">Гол(ів)</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center text-[11px] text-gray-600 py-4">Немає забитих голів.</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Assistants */}
+                <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-pink mb-3">
+                    🎯 Кращі Асистенти
+                  </h3>
+                  
+                  <div className="space-y-2">
+                    {stats?.topAssistants && stats.topAssistants.length > 0 ? (
+                      stats.topAssistants.map((player, idx) => (
+                        <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2 last:border-b-0 text-xs">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded bg-ps-dark-item text-[10px] font-bold text-gray-400 flex items-center justify-center">
+                              {idx + 1}
+                            </div>
+                            <div>
+                              <div className="font-bold text-white">{player.player_name}</div>
+                              <div className="text-[9px] text-gray-400">{player.team_name}</div>
+                            </div>
+                          </div>
+                          <div className="font-extrabold text-ps-neon-pink text-sm">
+                            {player.assists_count} <span className="text-[9px] font-normal text-gray-500">Пас(ів)</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center text-[11px] text-gray-600 py-4">Немає асистів.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: COINS LEADERBOARD */}
+            {activeStatsTab === 'coins' && (
+              <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-yellow mb-3 flex items-center gap-1.5">
+                  <Coins className="w-4 h-4 text-ps-yellow" /> Лідерборд Багатства (PS-Coins)
+                </h3>
+                
+                <div className="space-y-2.5">
+                  {stats?.coinsLeaderboard && stats.coinsLeaderboard.length > 0 ? (
+                    stats.coinsLeaderboard.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2.5 last:border-b-0 text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-6 h-6 rounded-full font-bold flex items-center justify-center text-xs ${
+                            idx === 0 ? 'bg-ps-yellow text-black' : 'bg-ps-dark-item text-gray-400'
+                          }`}>
+                            {idx + 1}
+                          </div>
+                          <span className="font-bold text-white">{item.player_name}</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-1 bg-ps-yellow/10 border border-ps-yellow/30 px-2.5 py-1 rounded-lg">
+                          <span className="font-extrabold text-ps-yellow text-sm">{item.coins_balance}</span>
+                          <span className="text-[9px] text-ps-yellow/85 uppercase font-bold tracking-wider">PSC</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-xs text-gray-600 py-4">Рейтинг пустий.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: ADMIN PANEL */}
+        {/* ========================================================================= */}
+        {activeTab === 'admin' && (
+          <div className="space-y-6">
+            
+            {/* 1. TOURNAMENT CONSTRUCTOR */}
+            <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue flex items-center gap-1">
+                <Users className="w-4 h-4 text-ps-blue" /> Конструктор турніру
+              </h3>
+
+              <div className="space-y-3 text-xs">
+                {/* Title */}
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Назва турніру</label>
+                  <input
+                    type="text"
+                    value={tournamentName}
+                    onChange={(e) => setTournamentName(e.target.value)}
+                    placeholder="Напр. Осінній Кубок 2026"
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                  />
+                </div>
+
+                {/* Players grid */}
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Гравці (4 учасники)</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {tourneyPlayers.map((p, idx) => (
+                      <input
+                        key={idx}
+                        type="text"
+                        value={p}
+                        onChange={(e) => {
+                          const updated = [...tourneyPlayers];
+                          updated[idx] = e.target.value;
+                          setTourneyPlayers(updated);
+                        }}
+                        className="bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors text-center"
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pot size & Type */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-gray-400 font-semibold mb-1">К-ть команд на гравця (N)</label>
+                    <select
+                      value={tourneyN}
+                      onChange={(e) => {
+                        setTourneyN(parseInt(e.target.value));
+                        setSelectedTeamIds([]); // Clear selections
+                      }}
+                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                    >
+                      <option value="1">1 команда</option>
+                      <option value="2">2 команди</option>
+                      <option value="3">3 команди</option>
+                      <option value="4">4 команди</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-gray-400 font-semibold mb-1">Тип турніру</label>
+                    <select
+                      value={tourneyType}
+                      onChange={(e) => setTourneyType(e.target.value)}
+                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                    >
+                      <option value="Groups+Playoff">Групи+Плей-оф</option>
+                      <option value="Playoff">Суто Плей-оф</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Team Selection Tabs */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-gray-400 font-semibold">Оберіть команди ({selectedTeamIds.length} / {4 * tourneyN})</label>
+                    <span className="text-[10px] text-ps-neon-blue font-bold">
+                      {selectedTeamIds.length === 4 * tourneyN ? 'Достатньо!' : `Потрібно вибрати ще ${4 * tourneyN - selectedTeamIds.length}`}
+                    </span>
+                  </div>
+
+                  {/* League tabs header */}
+                  <div className="flex gap-1 overflow-x-auto pb-2 pr-1 scrollbar-thin">
+                    {Object.keys(teams).map(league => (
+                      <button
+                        key={league}
+                        type="button"
+                        onClick={() => setSelectedLeagueTab(league)}
+                        className={`py-1 px-3 rounded-lg text-[10px] font-bold shrink-0 border uppercase tracking-wider transition-colors ${
+                          selectedLeagueTab === league 
+                            ? 'bg-ps-blue/20 border-ps-neon-blue text-ps-neon-blue shadow-neon-blue'
+                            : 'bg-ps-dark border-ps-dark-item text-gray-400'
+                        }`}
+                      >
+                        {league}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Teams Selection Grid */}
+                  <div className="bg-ps-dark border border-ps-dark-item rounded-xl p-3 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto mt-2">
+                    {teams[selectedLeagueTab]?.map(team => {
+                      const isSelected = selectedTeamIds.includes(team.id);
+                      return (
+                        <button
+                          key={team.id}
+                          type="button"
+                          onClick={() => toggleTeamSelection(team.id)}
+                          className={`p-2.5 rounded-xl border text-left transition-all duration-300 ${
+                            isSelected 
+                              ? 'bg-ps-neon-blue/10 border-ps-neon-blue text-white shadow-neon-blue' 
+                              : 'bg-ps-dark-card border-ps-dark-item text-gray-300 hover:border-gray-600'
+                          }`}
+                        >
+                          <div className="font-bold text-xs truncate">{team.name}</div>
+                          <div className="text-[9px] text-gray-400 mt-0.5">Рейтинг: {team.overall}</div>
+                        </button>
+                      );
+                    })}
+                    {(!teams[selectedLeagueTab] || teams[selectedLeagueTab].length === 0) && (
+                      <div className="col-span-2 text-center text-xs text-gray-600 py-4">
+                        Команд немає. Додайте нижче!
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Generate Button */}
+                <button
+                  type="button"
+                  onClick={handleGenerateTournament}
+                  disabled={loading || selectedTeamIds.length !== 4 * tourneyN}
+                  className="w-full bg-ps-blue hover:bg-ps-blue/90 disabled:opacity-50 text-white font-bold py-3 rounded-xl shadow-neon-blue transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Play className="w-4 h-4 fill-white" /> ЗГЕНЕРУВАТИ ТУРНІР
+                </button>
+              </div>
+            </div>
+
+            {/* 2. SQUAD ROSTER EDITOR */}
+            <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-pink flex items-center gap-1">
+                <Edit3 className="w-4 h-4 text-ps-neon-pink" /> Редагування Складів Команд
+              </h3>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Оберіть команду</label>
+                  <select
+                    value={selectedTeamForPlayers}
+                    onChange={(e) => setSelectedTeamForPlayers(e.target.value)}
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-pink transition-colors"
+                  >
+                    {flatTeams.map(t => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.league})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Add footballer */}
+                <form onSubmit={handleAddPlayerToRoster} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newPlayerRosterName}
+                    onChange={(e) => setNewPlayerRosterName(e.target.value)}
+                    placeholder="Ім'я футболіста"
+                    className="flex-1 bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-pink transition-colors"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-ps-neon-pink/15 border border-ps-neon-pink/40 hover:bg-ps-neon-pink hover:text-black text-ps-neon-pink font-bold px-4 rounded-xl transition-all"
+                  >
+                    Додати
+                  </button>
+                </form>
+
+                {/* Roster list */}
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {teamPlayersList.map(player => (
+                    <div key={player.id} className="bg-ps-dark border border-ps-dark-item rounded-xl p-2.5 flex items-center justify-between gap-2">
+                      <span className="font-bold text-white">{player.name}</span>
+                      <button
+                        onClick={() => handleDeletePlayerFromRoster(player.id)}
+                        className="text-gray-500 hover:text-ps-neon-pink p-1 transition-colors"
+                        title="Видалити"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {teamPlayersList.length === 0 && (
+                    <div className="text-center text-[10px] text-gray-500 py-4 bg-ps-dark rounded-xl border border-ps-dark-item border-dashed">
+                      Склад пустий
+                    </div>
+                  )}
+                </div>
+
+                {/* Delete entire team */}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteTeam(selectedTeamForPlayers)}
+                  className="w-full border border-ps-neon-pink/30 bg-ps-neon-pink/5 hover:bg-ps-neon-pink/20 text-ps-neon-pink text-xs font-semibold py-2.5 rounded-xl transition-all"
+                >
+                  Видалити цю команду взагалі
+                </button>
+              </div>
+            </div>
+
+            {/* 3. CREATE TEAM FORM */}
+            <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-white flex items-center gap-1">
+                <Plus className="w-4 h-4 text-white" /> Створення нової команди
+              </h3>
+
+              <form onSubmit={handleCreateTeam} className="space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-gray-400 font-semibold mb-1">Назва команди</label>
+                    <input
+                      type="text"
+                      value={newTeamName}
+                      onChange={(e) => setNewTeamName(e.target.value)}
+                      placeholder="Напр. Real Madrid"
+                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-400 font-semibold mb-1">Ліга</label>
+                    <select
+                      value={newTeamLeague}
+                      onChange={(e) => setNewTeamLeague(e.target.value)}
+                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                    >
+                      <option value="Premier League">Англійська ліга</option>
+                      <option value="La Liga">Іспанська ліга</option>
+                      <option value="Bundesliga">Німецька ліга</option>
+                      <option value="Serie A">Італійська ліга</option>
+                      <option value="National Teams">Збірні</option>
+                      <option value="Custom">Інше</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Ratings sliders */}
+                <div className="space-y-2 bg-ps-dark p-3 rounded-xl border border-ps-dark-item">
+                  <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Характеристики команди</div>
+                  
+                  <div>
+                    <div className="flex justify-between mb-0.5 text-gray-400">
+                      <span>Атака</span>
+                      <span className="font-bold text-white">{newTeamAttack}</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="99" value={newTeamAttack}
+                      onChange={(e) => setNewTeamAttack(parseInt(e.target.value))}
+                      className="w-full accent-ps-neon-blue"
+                    />
+                  </div>
+                  
+                  <div>
+                    <div className="flex justify-between mb-0.5 text-gray-400">
+                      <span>Півзахист</span>
+                      <span className="font-bold text-white">{newTeamMidfield}</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="99" value={newTeamMidfield}
+                      onChange={(e) => setNewTeamMidfield(parseInt(e.target.value))}
+                      className="w-full accent-ps-neon-blue"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-0.5 text-gray-400">
+                      <span>Захист</span>
+                      <span className="font-bold text-white">{newTeamDefense}</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="99" value={newTeamDefense}
+                      onChange={(e) => setNewTeamDefense(parseInt(e.target.value))}
+                      className="w-full accent-ps-neon-blue"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-0.5 text-gray-400">
+                      <span>Загальний рейтинг (OVR)</span>
+                      <span className="font-bold text-ps-neon-blue">{newTeamOverall}</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="99" value={newTeamOverall}
+                      onChange={(e) => setNewTeamOverall(parseInt(e.target.value))}
+                      className="w-full accent-ps-neon-blue"
+                    />
+                  </div>
+                </div>
+
+                {/* Comma separated roster */}
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Склад футболістів (через кому)</label>
+                  <textarea
+                    value={newTeamRoster}
+                    onChange={(e) => setNewTeamRoster(e.target.value)}
+                    placeholder="Напр. Cole Palmer, Nicolas Jackson, Enzo Fernandez"
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors h-16 resize-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-ps-blue hover:bg-ps-blue/90 text-white font-bold py-2.5 rounded-xl transition-all"
+                >
+                  Зберегти Команду
+                </button>
+              </form>
+            </div>
+
+            {/* 4. CONFLICT RESOLUTION (PLAYOFF TEAM OWNER TRANSFER) */}
+            <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-yellow flex items-center gap-1">
+                <AlertTriangle className="w-4 h-4 text-ps-yellow" /> Вирішення конфліктів у плей-оф
+              </h3>
+              
+              <p className="text-[10px] text-gray-400 leading-relaxed">
+                Якщо дві команди одного гравця зійшлися в сітці плей-оф, ви можете тимчасово передати керування однією з них учаснику, який вибув з турніру.
+              </p>
+
+              <form onSubmit={handleTransferPlayoffTeam} className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Оберіть матч плей-оф</label>
+                  <select
+                    value={transferMatchId}
+                    onChange={(e) => setTransferMatchId(e.target.value)}
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
+                  >
+                    <option value="">-- Оберіть матч --</option>
+                    {matches.filter(m => m.stage.includes('Playoff') && m.status === 'pending').map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.stage}: {m.team1_name} vs {m.team2_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-gray-400 font-semibold mb-1">Команда, яку передають</label>
+                    <select
+                      value={transferTeamId}
+                      onChange={(e) => setTransferTeamId(e.target.value)}
+                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
+                    >
+                      <option value="">-- Команда --</option>
+                      {transferMatchId && (() => {
+                        const m = matches.find(x => x.id === parseInt(transferMatchId));
+                        return m ? (
+                          <>
+                            <option value={m.team1_id}>{m.team1_name} ({m.player1_name})</option>
+                            <option value={m.team2_id}>{m.team2_name} ({m.player2_name})</option>
+                          </>
+                        ) : null;
+                      })()}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 font-semibold mb-1">Новий керуючий гравець</label>
+                    <select
+                      value={transferNewPlayerId}
+                      onChange={(e) => setTransferNewPlayerId(e.target.value)}
+                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
+                    >
+                      <option value="">-- Учасник --</option>
+                      {players.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full border border-ps-yellow/40 bg-ps-yellow/10 hover:bg-ps-yellow hover:text-black text-ps-yellow font-bold py-2.5 rounded-xl transition-all"
+                >
+                  Передати керування
+                </button>
+              </form>
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: BANNER GENERATOR */}
+        {/* ========================================================================= */}
+        {activeTab === 'banner-gen' && (
+          <div className="space-y-6">
+            
+            <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4 text-ps-neon-blue" /> Генератор банерів матчів
+              </h3>
+
+              <div className="space-y-3 text-xs">
+                {/* Autopopulate from pending match */}
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Автовведення з черги матчів</label>
+                  <select
+                    value={bannerMatchId}
+                    onChange={(e) => handleSelectBannerMatch(e.target.value)}
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                  >
+                    <option value="">-- Оберіть матч --</option>
+                    {pendingMatches.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.player1_name} ({m.team1_name}) vs {m.player2_name} ({m.team2_name})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Team 1 details */}
+                <div className="grid grid-cols-2 gap-2 bg-ps-dark p-3 rounded-xl border border-ps-dark-item">
+                  <div className="col-span-2 text-[10px] uppercase font-bold text-ps-neon-blue tracking-wider">Команда 1 (Ліва)</div>
+                  <div>
+                    <label className="block text-gray-400 text-[10px] mb-0.5">Назва команди</label>
+                    <input
+                      type="text" value={bannerTeam1} onChange={(e) => setBannerTeam1(e.target.value)}
+                      className="w-full bg-ps-dark-card border border-ps-dark-item rounded-lg py-1.5 px-2 text-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-400 text-[10px] mb-0.5">Власник (Гравець)</label>
+                    <input
+                      type="text" value={bannerPlayer1} onChange={(e) => setBannerPlayer1(e.target.value)}
+                      className="w-full bg-ps-dark-card border border-ps-dark-item rounded-lg py-1.5 px-2 text-white text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Team 2 details */}
+                <div className="grid grid-cols-2 gap-2 bg-ps-dark p-3 rounded-xl border border-ps-dark-item">
+                  <div className="col-span-2 text-[10px] uppercase font-bold text-ps-neon-pink tracking-wider">Команда 2 (Права)</div>
+                  <div>
+                    <label className="block text-gray-400 text-[10px] mb-0.5">Назва команди</label>
+                    <input
+                      type="text" value={bannerTeam2} onChange={(e) => setBannerTeam2(e.target.value)}
+                      className="w-full bg-ps-dark-card border border-ps-dark-item rounded-lg py-1.5 px-2 text-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-400 text-[10px] mb-0.5">Власник (Гравець)</label>
+                    <input
+                      type="text" value={bannerPlayer2} onChange={(e) => setBannerPlayer2(e.target.value)}
+                      className="w-full bg-ps-dark-card border border-ps-dark-item rounded-lg py-1.5 px-2 text-white text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Canvas preview */}
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-2">Передогляд банера (800x450)</label>
+                  <div className="w-full border border-ps-dark-item rounded-2xl overflow-hidden aspect-video bg-black flex items-center justify-center">
+                    <canvas 
+                      ref={canvasRef} 
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+
+                {/* Download button */}
+                <button
+                  type="button"
+                  onClick={downloadBannerImage}
+                  className="w-full bg-ps-blue hover:bg-ps-blue/90 text-white font-bold py-3 rounded-xl shadow-neon-blue transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Download className="w-4 h-4" /> ЗАВАНТАЖИТИ КАРТКУ АНОНСУ
+                </button>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+      </main>
+
+      {/* ========================================================================= */}
+      {/* WINDOW CLOSING MATCH MODAL */}
+      {/* ========================================================================= */}
+      {activeClosingMatch && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end justify-center p-4">
+          <div className="bg-ps-dark-card border border-ps-dark-item rounded-t-3xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up">
+            
+            <div className="flex items-center justify-between border-b border-ps-dark-item pb-3">
+              <div>
+                <h3 className="font-extrabold text-sm text-white">Внесення результату</h3>
+                <span className="text-[10px] text-ps-neon-blue uppercase tracking-widest font-bold">{activeClosingMatch.stage}</span>
+              </div>
+              <button 
+                onClick={() => setActiveClosingMatch(null)}
+                className="text-gray-400 hover:text-white text-xs font-bold uppercase tracking-wider py-1 px-3 bg-ps-dark-item rounded-xl"
+              >
+                Закрити
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitMatchResult} className="space-y-4 text-xs">
+              
+              {/* Score input grid */}
+              <div className="grid grid-cols-7 items-center text-center bg-ps-dark p-4 rounded-2xl border border-ps-dark-item">
+                <div className="col-span-2">
+                  <div className="font-extrabold text-sm text-white truncate mb-1">{activeClosingMatch.team1_name}</div>
+                  <input
+                    type="number" min="0" value={score1} onChange={(e) => setScore1(e.target.value)}
+                    className="w-12 bg-ps-dark-card border border-ps-dark-item rounded-xl py-1.5 text-center font-extrabold text-white text-lg focus:outline-none focus:border-ps-neon-blue"
+                  />
+                </div>
+                
+                <div className="col-span-3 text-gray-500 font-extrabold text-lg">:</div>
+
+                <div className="col-span-2">
+                  <div className="font-extrabold text-sm text-white truncate mb-1">{activeClosingMatch.team2_name}</div>
+                  <input
+                    type="number" min="0" value={score2} onChange={(e) => setScore2(e.target.value)}
+                    className="w-12 bg-ps-dark-card border border-ps-dark-item rounded-xl py-1.5 text-center font-extrabold text-white text-lg focus:outline-none focus:border-ps-neon-blue"
+                  />
+                </div>
+              </div>
+
+              {/* Goals protocol tracker */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Протокол голів матчу</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button" onClick={() => addGoalRow(activeClosingMatch.team1_id)}
+                      className="bg-ps-blue/15 border border-ps-blue/40 text-ps-neon-blue py-1 px-2.5 rounded-lg text-[10px] font-bold"
+                    >
+                      + {activeClosingMatch.team1_name}
+                    </button>
+                    <button
+                      type="button" onClick={() => addGoalRow(activeClosingMatch.team2_id)}
+                      className="bg-ps-neon-pink/15 border border-ps-neon-pink/40 text-ps-neon-pink py-1 px-2.5 rounded-lg text-[10px] font-bold"
+                    >
+                      + {activeClosingMatch.team2_name}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Goals rows */}
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {matchGoals.map((g, idx) => {
+                    const isTeam1Goal = g.team_id === activeClosingMatch.team1_id;
+                    const squad = isTeam1Goal ? competingPlayers.team1 : competingPlayers.team2;
+                    const opponentSquad = isTeam1Goal ? competingPlayers.team2 : competingPlayers.team1; // assist could theoretically be an own goal? Let's use same squad for normal assist
+
+                    return (
+                      <div key={idx} className="flex gap-1.5 items-center bg-ps-dark p-2 rounded-xl border border-ps-dark-item">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${isTeam1Goal ? 'bg-ps-blue shadow-neon-blue' : 'bg-ps-neon-pink shadow-neon-pink'}`}></span>
+                        
+                        {/* Scorer select */}
+                        <select
+                          value={g.scorer_id}
+                          onChange={(e) => updateGoalRow(idx, 'scorer_id', e.target.value)}
+                          className="flex-1 bg-ps-dark-card border border-ps-dark-item rounded-lg py-1 px-1.5 text-[10px] text-white focus:outline-none"
+                        >
+                          <option value="">-- Автор --</option>
+                          {squad.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+
+                        {/* Assistant select */}
+                        <select
+                          value={g.assistant_id}
+                          onChange={(e) => updateGoalRow(idx, 'assistant_id', e.target.value)}
+                          className="flex-1 bg-ps-dark-card border border-ps-dark-item rounded-lg py-1 px-1.5 text-[10px] text-white focus:outline-none"
+                        >
+                          <option value="">-- Асистент --</option>
+                          {squad.filter(p => p.id !== g.scorer_id).map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+
+                        {/* Minute */}
+                        <input
+                          type="number" placeholder="Хв" min="1" max="120" value={g.minute}
+                          onChange={(e) => updateGoalRow(idx, 'minute', e.target.value)}
+                          className="w-10 bg-ps-dark-card border border-ps-dark-item rounded-lg py-1 text-center text-[10px] text-white"
+                        />
+
+                        <button
+                          type="button" onClick={() => removeGoalRow(idx)}
+                          className="text-gray-500 hover:text-ps-neon-pink shrink-0 p-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {matchGoals.length === 0 && (
+                    <div className="text-center text-[10px] text-gray-500 py-3 bg-ps-dark/50 rounded-xl border border-ps-dark-item border-dashed">
+                      Забиті голи відсутні у протоколі. Додайте автора, якщо рахунок більший за 0.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Playoff advancement options (Optional for final rounds) */}
+              {activeClosingMatch.stage.includes('Playoff') && (
+                <div className="bg-ps-dark p-3 rounded-2xl border border-ps-dark-item space-y-2">
+                  <label className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block mb-1">Вихід у наступний раунд (+50 коїнів)</label>
+                  
+                  <label className="flex items-center gap-2 text-white">
+                    <input
+                      type="checkbox" checked={player1Advanced}
+                      onChange={(e) => setPlayer1Advanced(e.target.checked)}
+                      className="w-4 h-4 accent-ps-neon-blue"
+                    />
+                    <span>{activeClosingMatch.player1_name} пройшов далі</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-white">
+                    <input
+                      type="checkbox" checked={player2Advanced}
+                      onChange={(e) => setPlayer2Advanced(e.target.checked)}
+                      className="w-4 h-4 accent-ps-neon-blue"
+                    />
+                    <span>{activeClosingMatch.player2_name} пройшов далі</span>
+                  </label>
+                </div>
+              )}
+
+              {/* Submit result */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-ps-green/20 hover:bg-ps-green border border-ps-green/45 text-ps-green hover:text-black font-bold py-3 rounded-xl transition-all"
+              >
+                ЗАПИСАТИ РЕЗУЛЬТАТ ТА НАРАХУВАТИ КОЇНИ
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* BOTTOM MOBILE NAVIGATION BAR */}
+      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-ps-dark-card border-t border-ps-dark-item flex items-center justify-around py-3 px-2 z-10 shadow-2xl">
+        <button
+          onClick={() => setActiveTab('match-center')}
+          className={`flex flex-col items-center gap-1 transition-all ${
+            activeTab === 'match-center' ? 'text-ps-neon-blue neon-glow-text-blue font-bold scale-110' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <Gamepad2 className="w-5 h-5" />
+          <span className="text-[10px]">Матч-Центр</span>
+        </button>
+        
+        <button
+          onClick={() => setActiveTab('stats')}
+          className={`flex flex-col items-center gap-1 transition-all ${
+            activeTab === 'stats' ? 'text-ps-neon-blue neon-glow-text-blue font-bold scale-110' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <Trophy className="w-5 h-5" />
+          <span className="text-[10px]">Статистика</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('admin')}
+          className={`flex flex-col items-center gap-1 transition-all ${
+            activeTab === 'admin' ? 'text-ps-neon-blue neon-glow-text-blue font-bold scale-110' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <Settings className="w-5 h-5" />
+          <span className="text-[10px]">Адмінка</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('banner-gen')}
+          className={`flex flex-col items-center gap-1 transition-all ${
+            activeTab === 'banner-gen' ? 'text-ps-neon-blue neon-glow-text-blue font-bold scale-110' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <ImageIcon className="w-5 h-5" />
+          <span className="text-[10px]">Банери</span>
+        </button>
+      </nav>
+
+    </div>
+  );
+}
+
+export default App;
