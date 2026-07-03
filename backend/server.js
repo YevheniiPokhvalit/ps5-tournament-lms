@@ -15,23 +15,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, postman, curl)
-    if (!origin) return callback(null, true);
-
-    // Check if origin is explicitly allowed
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
-
-    // Match any Vercel deployments (e.g. *.vercel.app) and localhost (e.g. localhost:3000, 127.0.0.1:3000)
-    const isVercel = /\.vercel\.app$/.test(origin);
-    const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-
-    if (isVercel || isLocalhost) {
-      return callback(null, true);
-    }
-
-    return callback(new Error('Not allowed by CORS'));
+    // Allow any origin dynamically (crucial for local tunnels like ngrok and Vercel environments)
+    callback(null, true);
   },
   credentials: true,
   optionsSuccessStatus: 200

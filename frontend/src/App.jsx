@@ -19,6 +19,17 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5050';
 
+// Global fetch wrapper to bypass ngrok browser warnings
+const originalFetch = window.fetch;
+window.fetch = function (url, options = {}) {
+  if (typeof url === 'string' && url.startsWith(API_URL)) {
+    const headers = options.headers ? { ...options.headers } : {};
+    headers['ngrok-skip-browser-warning'] = 'true';
+    options.headers = headers;
+  }
+  return originalFetch(url, options);
+};
+
 function App() {
   const [activeTab, setActiveTab] = useState('match-center');
   
