@@ -274,12 +274,12 @@ function App() {
 
   // 5. Select team in tournament builder
   const toggleTeamSelection = (teamId) => {
-    const limit = 4 * tourneyN;
+    const limit = tourneyPlayers.length * tourneyN;
     if (selectedTeamIds.includes(teamId)) {
       setSelectedTeamIds(selectedTeamIds.filter(id => id !== teamId));
     } else {
       if (selectedTeamIds.length >= limit) {
-        triggerError(`Ви вже вибрали максимум команд (${limit}) для N = ${tourneyN}`);
+        triggerError(`Ви вже вибрали максимум команд (${limit}) для вашої кількості гравців`);
         return;
       }
       setSelectedTeamIds([...selectedTeamIds, teamId]);
@@ -288,7 +288,7 @@ function App() {
 
   // 6. Generate Tournament
   const handleGenerateTournament = async () => {
-    const limit = 4 * tourneyN;
+    const limit = tourneyPlayers.length * tourneyN;
     if (!tournamentName) return triggerError('Введіть назву турніру');
     if (selectedTeamIds.length !== limit) {
       return triggerError(`Будь ласка, оберіть рівно ${limit} команд (вибрано ${selectedTeamIds.length})`);
@@ -1102,22 +1102,50 @@ function App() {
                   />
                 </div>
 
-                {/* Players grid */}
+                {/* Players List with Add/Remove */}
                 <div>
-                  <label className="block text-gray-400 font-semibold mb-1">Гравці (4 учасники)</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-gray-400 font-semibold">Гравці турніру ({tourneyPlayers.length})</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTourneyPlayers([...tourneyPlayers, `Гравець ${tourneyPlayers.length + 1}`]);
+                        setSelectedTeamIds([]); // Clear selection since limit changed
+                      }}
+                      className="text-[10px] bg-ps-blue/15 border border-ps-blue/40 text-ps-neon-blue font-bold px-2.5 py-1 rounded-lg hover:bg-ps-blue hover:text-white transition-all"
+                    >
+                      + Додати Гравця
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                     {tourneyPlayers.map((p, idx) => (
-                      <input
-                        key={idx}
-                        type="text"
-                        value={p}
-                        onChange={(e) => {
-                          const updated = [...tourneyPlayers];
-                          updated[idx] = e.target.value;
-                          setTourneyPlayers(updated);
-                        }}
-                        className="bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors text-center"
-                      />
+                      <div key={idx} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={p}
+                          onChange={(e) => {
+                            const updated = [...tourneyPlayers];
+                            updated[idx] = e.target.value;
+                            setTourneyPlayers(updated);
+                          }}
+                          placeholder={`Гравець ${idx + 1}`}
+                          className="flex-1 bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors text-center font-semibold"
+                        />
+                        {tourneyPlayers.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTourneyPlayers(tourneyPlayers.filter((_, i) => i !== idx));
+                              setSelectedTeamIds([]); // Clear selection since limit changed
+                            }}
+                            className="p-2 bg-ps-neon-pink/10 border border-ps-neon-pink/30 hover:bg-ps-neon-pink hover:text-black text-ps-neon-pink rounded-xl transition-all shrink-0"
+                            title="Видалити гравця"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1157,9 +1185,9 @@ function App() {
                 {/* Team Selection Tabs */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-gray-400 font-semibold">Оберіть команди ({selectedTeamIds.length} / {4 * tourneyN})</label>
+                    <label className="text-gray-400 font-semibold">Оберіть команди ({selectedTeamIds.length} / {tourneyPlayers.length * tourneyN})</label>
                     <span className="text-[10px] text-ps-neon-blue font-bold">
-                      {selectedTeamIds.length === 4 * tourneyN ? 'Достатньо!' : `Потрібно вибрати ще ${4 * tourneyN - selectedTeamIds.length}`}
+                      {selectedTeamIds.length === (tourneyPlayers.length * tourneyN) ? 'Достатньо!' : `Потрібно ще ${(tourneyPlayers.length * tourneyN) - selectedTeamIds.length}`}
                     </span>
                   </div>
 

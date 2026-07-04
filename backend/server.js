@@ -291,13 +291,17 @@ app.post('/api/tournaments', async (req, res) => {
 
   // Validation
   if (!name || !playerNames || !type || !N || !teamIds) {
-    return res.status(400).json({ error: 'name, playerNames (array of 4), type, N, and teamIds are required' });
+    return res.status(400).json({ error: 'name, playerNames, type, N, and teamIds are required' });
   }
-  if (!Array.isArray(playerNames) || playerNames.length !== 4) {
-    return res.status(400).json({ error: 'playerNames must be an array of exactly 4 players' });
+  if (!Array.isArray(playerNames) || playerNames.length < 2) {
+    return res.status(400).json({ error: 'playerNames must be an array of at least 2 players' });
   }
-  if (!Array.isArray(teamIds) || teamIds.length !== 4 * N) {
-    return res.status(400).json({ error: `teamIds must contain exactly 4 * N (${4 * N}) teams` });
+  
+  const numPlayers = playerNames.length;
+  const expectedTeamsCount = numPlayers * N;
+
+  if (!Array.isArray(teamIds) || teamIds.length !== expectedTeamsCount) {
+    return res.status(400).json({ error: `teamIds must contain exactly ${expectedTeamsCount} teams (number of players * N)` });
   }
   if (type !== 'Groups+Playoff' && type !== 'Playoff') {
     return res.status(400).json({ error: 'type must be either "Groups+Playoff" or "Playoff"' });
@@ -310,6 +314,7 @@ app.post('/api/tournaments', async (req, res) => {
     // 1. Resolve human players IDs (create if missing)
     const playerIds = [];
     for (const pName of playerNames) {
+      if (!pName || pName.trim() === '') continue;
       let playerRes = await client.query('SELECT id FROM players WHERE name = $1;', [pName.trim()]);
       if (playerRes.rowCount === 0) {
         playerRes = await client.query('INSERT INTO players (name) VALUES ($1) RETURNING id;', [pName.trim()]);
@@ -317,24 +322,28 @@ app.post('/api/tournaments', async (req, res) => {
       playerIds.push(playerRes.rows[0].id);
     }
 
+    if (playerIds.length !== numPlayers) {
+      throw new Error('Some player names were blank or duplicate.');
+    }
+
     // 2. Retrieve selected teams
     const teamsRes = await client.query('SELECT id, name, overall FROM teams WHERE id = ANY($1);', [teamIds]);
     const teams = teamsRes.rows;
-    if (teams.length !== 4 * N) {
-      throw new Error(`Only ${teams.length} out of ${4 * N} teams were found in the database.`);
+    if (teams.length !== expectedTeamsCount) {
+      throw new Error(`Only ${teams.length} out of ${expectedTeamsCount} teams were found in the database.`);
     }
 
     // 3. Sort overall descending
     teams.sort((a, b) => b.overall - a.overall);
 
-    // 4. Group into N pots of 4 teams each
+    // 4. Group into N pots of numPlayers teams each
     const pots = [];
     for (let i = 0; i < N; i++) {
-      pots.push(teams.slice(i * 4, (i + 1) * 4));
+      pots.push(teams.slice(i * numPlayers, (i + 1) * numPlayers));
     }
 
     // 5. Balanced random distribution:
-    // For each pot, shuffle the 4 teams and distribute to the 4 players
+    // For each pot, shuffle the teams and distribute to the players
     const assignments = []; // { teamId, playerId, potIndex }
     const playerTeams = {}; // playerId -> array of teams
     playerIds.forEach(id => playerTeams[id] = []);
@@ -372,35 +381,31 @@ app.post('/api/tournaments', async (req, res) => {
 
     if (type === 'Groups+Playoff') {
       // Generate N groups. Group A corresponds to Pot 0, Group B to Pot 1...
-      // Since Pot X has 4 teams owned by 4 different players, they play a round-robin stage (6 matches).
+      // Since Pot X has K teams owned by K different players, they play a round-robin stage.
       for (let g = 0; g < N; g++) {
         const groupLetter = String.fromCharCode(65 + g); // Group A, Group B...
         const groupTeams = assignments.filter(a => a.potIndex === g);
         
-        // Round robin pairings for 4 items: indices (0,1), (2,3), (0,2), (1,3), (0,3), (1,2)
-        const pairings = [
-          [0, 1], [2, 3],
-          [0, 2], [1, 3],
-          [0, 3], [1, 2]
-        ];
+        // Single round-robin pairings for any K teams: u plays v for all u < v
+        for (let u = 0; u < numPlayers; u++) {
+          for (let v = u + 1; v < numPlayers; v++) {
+            const team1 = groupTeams[u];
+            const team2 = groupTeams[v];
 
-        for (const [u, v] of pairings) {
-          const team1 = groupTeams[u];
-          const team2 = groupTeams[v];
-
-          const insertMatchRes = await client.query(`
-            INSERT INTO matches (tournament_id, stage, team1_id, team2_id, current_player1_id, current_player2_id, status)
-            VALUES ($1, $2, $3, $4, $5, $6, 'pending')
-            RETURNING *;
-          `, [
-            tournamentId,
-            `Group ${groupLetter}`,
-            team1.teamId,
-            team2.teamId,
-            team1.playerId,
-            team2.playerId
-          ]);
-          matchesScheduled.push(insertMatchRes.rows[0]);
+            const insertMatchRes = await client.query(`
+              INSERT INTO matches (tournament_id, stage, team1_id, team2_id, current_player1_id, current_player2_id, status)
+              VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+              RETURNING *;
+            `, [
+              tournamentId,
+              `Group ${groupLetter}`,
+              team1.teamId,
+              team2.teamId,
+              team1.playerId,
+              team2.playerId
+            ]);
+            matchesScheduled.push(insertMatchRes.rows[0]);
+          }
         }
       }
     } else {
