@@ -1961,10 +1961,10 @@ function App() {
                   </div>
                 )}
 
-                {/* Блок налаштування передачі (з'являється, тільки коли матч обрано) */}
+                {/* Блок налаштування передачі (з'являється, тільки коли матч обрано) ytpyf */}
                 {transferMatchId && (
                   <div className="bg-ps-dark p-3 rounded-xl border border-ps-dark-item space-y-3 animate-slide-up">
-                    <div className="text-[10px] uppercase font-bold text-ps-yellow tracking-wider">Налаштування передачі контролю</div>
+                    <div className="text-[10px] uppercase font-bold text-ps-yellow tracking-wider">Налаштування передачі контролю!</div>
                     
                     <div className="grid grid-cols-2 gap-2">
                       <div>
