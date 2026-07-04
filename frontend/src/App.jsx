@@ -167,6 +167,9 @@ function App() {
   const [transferMatchId, setTransferMatchId] = useState('');
   const [transferTeamId, setTransferTeamId] = useState('');
   const [transferNewPlayerId, setTransferNewPlayerId] = useState('');
+  const [inlineTransferMatchId, setInlineTransferMatchId] = useState(null);
+  const [inlineTransferTeamId, setInlineTransferTeamId] = useState('');
+  const [inlineTransferPlayerId, setInlineTransferPlayerId] = useState('');
 
   // 6. Canvas banner generator
   const canvasRef = useRef(null);
@@ -583,6 +586,115 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleInlineTransfer = async (matchId) => {
+    if (!inlineTransferTeamId || !inlineTransferPlayerId) {
+      triggerError('Заповніть усі поля для передачі');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/matches/${matchId}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          team_id: parseInt(inlineTransferTeamId),
+          new_player_id: parseInt(inlineTransferPlayerId)
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      triggerSuccess('Керування командою успішно передано!');
+      setInlineTransferMatchId(null);
+      setInlineTransferTeamId('');
+      setInlineTransferPlayerId('');
+      fetchData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderConflictTransferButton = (match) => {
+    if (!match || match.player1_name !== match.player2_name) return null;
+
+    const isEditing = inlineTransferMatchId === match.id;
+
+    return (
+      <div className="mt-4 p-3 bg-ps-neon-pink/10 border border-ps-neon-pink/30 rounded-xl space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-extrabold text-ps-neon-pink uppercase tracking-wider flex items-center gap-1">
+            ⚠️ Конфлікт самоігри ({match.player1_name})
+          </span>
+          {!isEditing && (
+            <button
+              onClick={() => {
+                setInlineTransferMatchId(match.id);
+                setInlineTransferTeamId('');
+                setInlineTransferPlayerId('');
+              }}
+              className="text-[9px] bg-ps-neon-pink hover:bg-ps-neon-pink/80 text-black font-extrabold px-2 py-1 rounded transition-all"
+            >
+              Передати команду
+            </button>
+          )}
+        </div>
+
+        {isEditing && (
+          <div className="space-y-3 text-[11px]">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-gray-400 text-[9px] mb-1">Яку команду передати?</label>
+                <select
+                  value={inlineTransferTeamId}
+                  onChange={(e) => setInlineTransferTeamId(e.target.value)}
+                  className="w-full bg-ps-dark border border-ps-dark-item rounded-lg p-1.5 text-white focus:outline-none"
+                >
+                  <option value="">-- Оберіть --</option>
+                  <option value={match.team1_id}>{match.team1_name}</option>
+                  <option value={match.team2_id}>{match.team2_name}</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-400 text-[9px] mb-1">Кому передати?</label>
+                <select
+                  value={inlineTransferPlayerId}
+                  onChange={(e) => setInlineTransferPlayerId(e.target.value)}
+                  className="w-full bg-ps-dark border border-ps-dark-item rounded-lg p-1.5 text-white focus:outline-none"
+                >
+                  <option value="">-- Оберіть --</option>
+                  {players
+                    .filter(p => p.name !== match.player1_name)
+                    .map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleInlineTransfer(match.id)}
+                disabled={loading || !inlineTransferTeamId || !inlineTransferPlayerId}
+                className="flex-1 bg-ps-neon-pink text-black font-bold py-1 px-2 rounded hover:bg-ps-neon-pink/90 disabled:opacity-50 transition-all text-center"
+              >
+                Підтвердити
+              </button>
+              <button
+                onClick={() => setInlineTransferMatchId(null)}
+                className="bg-ps-dark-item text-gray-400 py-1 px-2 rounded hover:text-white transition-all"
+              >
+                Скасувати
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const drawBanner = () => {
@@ -1024,6 +1136,7 @@ function App() {
                           </button>
                         </div>
                       )}
+                      {renderConflictTransferButton(liveMatch)}
                     </div>
                   ) : pendingMatches.length > 0 ? (
                     <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-5 relative overflow-hidden">
@@ -1098,6 +1211,7 @@ function App() {
                           </button>
                         </div>
                       )}
+                      {renderConflictTransferButton(pendingMatches[0])}
                     </div>
                   ) : (
                     <div className="bg-ps-dark-card border border-ps-dark-item border-dashed rounded-2xl p-8 text-center text-gray-500">
@@ -1111,52 +1225,55 @@ function App() {
                   <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Наступні в черзі</h2>
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                     {pendingMatches.slice(liveMatch ? 0 : 1).map((match, index) => (
-                      <div key={match.id} className="bg-ps-dark-card border border-ps-dark-item hover:border-ps-blue/30 rounded-xl p-3 flex items-center justify-between gap-2 transition-all">
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <div className="text-[10px] font-bold text-gray-500 w-5 text-center shrink-0">
-                            #{index + (liveMatch ? 1 : 2)}
+                      <div key={match.id} className="bg-ps-dark-card border border-ps-dark-item hover:border-ps-blue/30 rounded-xl p-3 transition-all">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="text-[10px] font-bold text-gray-500 w-5 text-center shrink-0">
+                              #{index + (liveMatch ? 1 : 2)}
+                            </div>
+                            
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between text-xs font-bold text-white mb-0.5">
+                                <span className="truncate flex items-center gap-1">
+                                  {renderTeamFlag(match.team1_flag_code)}
+                                  <span>{match.team1_name}</span>
+                                </span>
+                                <span className="text-gray-500 mx-2 shrink-0">vs</span>
+                                <span className="truncate text-right flex items-center justify-end gap-1">
+                                  <span>{match.team2_name}</span>
+                                  {renderTeamFlag(match.team2_flag_code)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-[9px] text-gray-400">
+                                <span className="truncate">{match.player1_name}</span>
+                                <span className="text-ps-neon-blue shrink-0 uppercase text-[8px] tracking-wider">{match.stage}</span>
+                                <span className="truncate text-right">{match.player2_name}</span>
+                              </div>
+                            </div>
                           </div>
                           
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between text-xs font-bold text-white mb-0.5">
-                              <span className="truncate flex items-center gap-1">
-                                {renderTeamFlag(match.team1_flag_code)}
-                                <span>{match.team1_name}</span>
-                              </span>
-                              <span className="text-gray-500 mx-2 shrink-0">vs</span>
-                              <span className="truncate text-right flex items-center justify-end gap-1">
-                                <span>{match.team2_name}</span>
-                                {renderTeamFlag(match.team2_flag_code)}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-[9px] text-gray-400">
-                              <span className="truncate">{match.player1_name}</span>
-                              <span className="text-ps-neon-blue shrink-0 uppercase text-[8px] tracking-wider">{match.stage}</span>
-                              <span className="truncate text-right">{match.player2_name}</span>
-                            </div>
-                          </div>
+                          {isAdminRoute && (
+                            <button 
+                              onClick={() => {
+                                fetch(`${API_URL}/api/matches/${match.id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ score1: null, score2: null, status: 'live' })
+                                })
+                                .then(() => {
+                                  triggerSuccess('Матч виведено в Live!');
+                                  fetchData();
+                                })
+                                .catch(err => triggerError(err.message));
+                              }}
+                              className="p-1.5 rounded-lg bg-ps-dark-item hover:bg-ps-blue text-ps-neon-blue hover:text-white transition-all shrink-0"
+                              title="Запустити"
+                            >
+                              <Play className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
-                        
-                        {isAdminRoute && (
-                          <button 
-                            onClick={() => {
-                              fetch(`${API_URL}/api/matches/${match.id}`, {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ score1: null, score2: null, status: 'live' })
-                              })
-                              .then(() => {
-                                triggerSuccess('Матч виведено в Live!');
-                                fetchData();
-                              })
-                              .catch(err => triggerError(err.message));
-                            }}
-                            className="p-1.5 rounded-lg bg-ps-dark-item hover:bg-ps-blue text-ps-neon-blue hover:text-white transition-all shrink-0"
-                            title="Запустити"
-                          >
-                            <Play className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        {renderConflictTransferButton(match)}
                       </div>
                     ))}
                     
@@ -1788,7 +1905,7 @@ function App() {
                     <label className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Матчі стадії плей-оф</label>
                     <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                       {matches
-                        .filter(m => m.tournament_id === parseInt(resolverTournamentId) && m.status === 'pending' && !m.stage.includes('Група'))
+                        .filter(m => m.tournament_id === parseInt(resolverTournamentId) && m.status !== 'completed' && !m.stage.includes('Група'))
                         .map(m => {
                           const isConflict = m.player1_name === m.player2_name;
                           const isSelected = parseInt(transferMatchId) === m.id;
@@ -1828,7 +1945,7 @@ function App() {
                           );
                         })}
 
-                      {matches.filter(m => m.tournament_id === parseInt(resolverTournamentId) && m.status === 'pending' && !m.stage.includes('Група')).length === 0 && (
+                      {matches.filter(m => m.tournament_id === parseInt(resolverTournamentId) && m.status !== 'completed' && !m.stage.includes('Група')).length === 0 && (
                         <div className="text-center text-[10px] text-gray-500 py-6 bg-ps-dark border border-ps-dark-item border-dashed rounded-xl">
                           Немає активних матчів плей-оф для цього турніру.
                         </div>

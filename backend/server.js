@@ -1038,7 +1038,7 @@ app.get('/api/stats', async (req, res) => {
       JOIN teams t2 ON m.team2_id = t2.id
       JOIN players p1 ON m.current_player1_id = p1.id
       JOIN players p2 ON m.current_player2_id = p2.id
-      WHERE m.tournament_id = $1 AND m.stage LIKE 'Playoff%'
+      WHERE m.tournament_id = $1 AND m.stage NOT LIKE 'Group%' AND m.stage NOT LIKE 'Група%'
       ORDER BY m.id ASC;
     `, [tournament_id]);
 
