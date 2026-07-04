@@ -337,6 +337,28 @@ function App() {
     }
   };
 
+  // 6b. Delete Tournament
+  const handleDeleteTournament = async (tournamentId) => {
+    if (!window.confirm('Ви впевнені, що хочете видалити цей турнір? Всі матчі та результати будуть назавжди видалені.')) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/tournaments/${tournamentId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      triggerSuccess('Турнір успішно видалено!');
+      if (selectedTournamentId === tournamentId) {
+        setSelectedTournamentId(null);
+      }
+      fetchData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 7. Open match closer window
   const openCloseMatchModal = async (match) => {
     setActiveClosingMatch(match);
@@ -682,7 +704,7 @@ function App() {
                       <div
                         key={t.id}
                         onClick={() => setSelectedTournamentId(t.id)}
-                        className="bg-ps-dark-card border border-ps-dark-item hover:border-ps-blue/40 rounded-xl p-4 flex items-center justify-between gap-3 cursor-pointer transition-all duration-300"
+                        className="bg-ps-dark-card border border-ps-dark-item hover:border-ps-blue/40 rounded-xl p-4 flex items-center justify-between gap-3 cursor-pointer transition-all duration-300 group"
                       >
                         <div className="min-w-0 flex-1">
                           <h3 className="font-extrabold text-sm text-white truncate">{t.name}</h3>
@@ -692,9 +714,23 @@ function App() {
                             <span>{new Date(t.date).toLocaleDateString()}</span>
                           </div>
                         </div>
-                        <span className={`text-[9px] font-bold px-2 py-0.5 border rounded-full uppercase tracking-wider ${statusClass} shrink-0`}>
-                          {statusLabel}
-                        </span>
+                        
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-[9px] font-bold px-2 py-0.5 border rounded-full uppercase tracking-wider ${statusClass}`}>
+                            {statusLabel}
+                          </span>
+                          
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTournament(t.id);
+                            }}
+                            className="p-2 rounded-xl bg-ps-neon-pink/10 border border-ps-neon-pink/20 hover:bg-ps-neon-pink hover:text-black text-ps-neon-pink transition-all duration-300"
+                            title="Видалити турнір"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

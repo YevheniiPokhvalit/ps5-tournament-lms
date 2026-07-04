@@ -500,6 +500,23 @@ app.post('/api/tournaments', async (req, res) => {
 });
 
 
+// DELETE /api/tournaments/:id - Delete a tournament and cascade delete all its matches
+app.delete('/api/tournaments/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const deleteRes = await pool.query('DELETE FROM tournaments WHERE id = $1 RETURNING id;', [id]);
+    if (deleteRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+    res.json({ message: 'Tournament deleted successfully', tournamentId: id });
+  } catch (error) {
+    console.error('Error deleting tournament:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+
 // =========================================================================
 // 3. SUBMIT MATCH SCORE & REWARD COINS
 // =========================================================================
