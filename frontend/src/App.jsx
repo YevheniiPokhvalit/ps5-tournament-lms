@@ -1166,6 +1166,12 @@ function App() {
                       <option value="2">2 команди</option>
                       <option value="3">3 команди</option>
                       <option value="4">4 команди</option>
+                      <option value="5">5 команд</option>
+                      <option value="6">6 команд</option>
+                      <option value="7">7 команд</option>
+                      <option value="8">8 команд</option>
+                      <option value="9">9 команд</option>
+                      <option value="10">10 команд</option>
                     </select>
                   </div>
                   
