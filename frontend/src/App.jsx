@@ -51,6 +51,19 @@ function App() {
     }
   };
 
+  const renderTeamFlag = (flagCode, size = "w-4 h-4") => {
+    if (flagCode && flagCode.trim() !== '') {
+      return (
+        <img
+          src={`https://flagcdn.com/w40/${flagCode.toLowerCase()}.png`}
+          alt="flag"
+          className={`${size} rounded-full object-cover shrink-0 border border-ps-dark-item/50`}
+        />
+      );
+    }
+    return <span className="text-[10px] shrink-0">⚽</span>;
+  };
+
   const handleAdminLogout = () => {
     setIsAdminAuthenticated(false);
     localStorage.removeItem('isAdminAuthenticated');
@@ -125,6 +138,7 @@ function App() {
   const [newTeamDefense, setNewTeamDefense] = useState(80);
   const [newTeamOverall, setNewTeamOverall] = useState(80);
   const [newTeamRoster, setNewTeamRoster] = useState('');
+  const [newTeamFlagCode, setNewTeamFlagCode] = useState('');
 
   // 2. Edit team players
   const [selectedTeamForPlayers, setSelectedTeamForPlayers] = useState('');
@@ -284,6 +298,7 @@ function App() {
           midfield: newTeamMidfield,
           defense: newTeamDefense,
           overall: newTeamOverall,
+          flag_code: newTeamFlagCode,
           players: playersArray
         })
       });
@@ -294,6 +309,7 @@ function App() {
       triggerSuccess(`Команду "${data.name}" успішно створено!`);
       setNewTeamName('');
       setNewTeamRoster('');
+      setNewTeamFlagCode('');
       fetchData();
     } catch (err) {
       triggerError(err.message);
@@ -1032,10 +1048,21 @@ function App() {
                       <div className="grid grid-cols-5 items-center gap-2">
                         {/* Team 1 */}
                         <div className="col-span-2 text-center">
-                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-blue/20 border border-ps-blue/40 flex items-center justify-center font-bold text-white text-lg mb-2">
-                            {liveMatch.team1_name.slice(0,2).toUpperCase()}
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-blue/20 border border-ps-blue/40 flex items-center justify-center font-bold text-white text-lg mb-2 overflow-hidden">
+                            {liveMatch.team1_flag_code ? (
+                              <img
+                                src={`https://flagcdn.com/w40/${liveMatch.team1_flag_code.toLowerCase()}.png`}
+                                alt="flag"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              liveMatch.team1_name.slice(0,2).toUpperCase()
+                            )}
                           </div>
-                          <h3 className="font-bold text-sm text-white truncate">{liveMatch.team1_name}</h3>
+                          <h3 className="font-bold text-sm text-white truncate flex items-center justify-center gap-1.5">
+                            {renderTeamFlag(liveMatch.team1_flag_code)}
+                            <span>{liveMatch.team1_name}</span>
+                          </h3>
                           <p className="text-[10px] text-gray-400 mt-0.5 truncate">{liveMatch.player1_name}</p>
                         </div>
 
@@ -1048,10 +1075,21 @@ function App() {
 
                         {/* Team 2 */}
                         <div className="col-span-2 text-center">
-                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-neon-pink/20 border border-ps-neon-pink/40 flex items-center justify-center font-bold text-white text-lg mb-2">
-                            {liveMatch.team2_name.slice(0,2).toUpperCase()}
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-neon-pink/20 border border-ps-neon-pink/40 flex items-center justify-center font-bold text-white text-lg mb-2 overflow-hidden">
+                            {liveMatch.team2_flag_code ? (
+                              <img
+                                src={`https://flagcdn.com/w40/${liveMatch.team2_flag_code.toLowerCase()}.png`}
+                                alt="flag"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              liveMatch.team2_name.slice(0,2).toUpperCase()
+                            )}
                           </div>
-                          <h3 className="font-bold text-sm text-white truncate">{liveMatch.team2_name}</h3>
+                          <h3 className="font-bold text-sm text-white truncate flex items-center justify-center gap-1.5">
+                            {renderTeamFlag(liveMatch.team2_flag_code)}
+                            <span>{liveMatch.team2_name}</span>
+                          </h3>
                           <p className="text-[10px] text-gray-400 mt-0.5 truncate">{liveMatch.player2_name}</p>
                         </div>
                       </div>
@@ -1077,10 +1115,21 @@ function App() {
                       <div className="grid grid-cols-5 items-center gap-2">
                         {/* Team 1 */}
                         <div className="col-span-2 text-center opacity-70">
-                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2">
-                            {pendingMatches[0].team1_name.slice(0,2).toUpperCase()}
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2 overflow-hidden">
+                            {pendingMatches[0].team1_flag_code ? (
+                              <img
+                                src={`https://flagcdn.com/w40/${pendingMatches[0].team1_flag_code.toLowerCase()}.png`}
+                                alt="flag"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              pendingMatches[0].team1_name.slice(0,2).toUpperCase()
+                            )}
                           </div>
-                          <h3 className="font-bold text-sm text-white truncate">{pendingMatches[0].team1_name}</h3>
+                          <h3 className="font-bold text-sm text-white truncate flex items-center justify-center gap-1.5">
+                            {renderTeamFlag(pendingMatches[0].team1_flag_code)}
+                            <span>{pendingMatches[0].team1_name}</span>
+                          </h3>
                           <p className="text-[10px] text-gray-400 mt-0.5 truncate">{pendingMatches[0].player1_name}</p>
                         </div>
 
@@ -1091,10 +1140,21 @@ function App() {
 
                         {/* Team 2 */}
                         <div className="col-span-2 text-center opacity-70">
-                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2">
-                            {pendingMatches[0].team2_name.slice(0,2).toUpperCase()}
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2 overflow-hidden">
+                            {pendingMatches[0].team2_flag_code ? (
+                              <img
+                                src={`https://flagcdn.com/w40/${pendingMatches[0].team2_flag_code.toLowerCase()}.png`}
+                                alt="flag"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              pendingMatches[0].team2_name.slice(0,2).toUpperCase()
+                            )}
                           </div>
-                          <h3 className="font-bold text-sm text-white truncate">{pendingMatches[0].team2_name}</h3>
+                          <h3 className="font-bold text-sm text-white truncate flex items-center justify-center gap-1.5">
+                            {renderTeamFlag(pendingMatches[0].team2_flag_code)}
+                            <span>{pendingMatches[0].team2_name}</span>
+                          </h3>
                           <p className="text-[10px] text-gray-400 mt-0.5 truncate">{pendingMatches[0].player2_name}</p>
                         </div>
                       </div>
@@ -1144,9 +1204,15 @@ function App() {
                           
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between text-xs font-bold text-white mb-0.5">
-                              <span className="truncate">{match.team1_name}</span>
+                              <span className="truncate flex items-center gap-1">
+                                {renderTeamFlag(match.team1_flag_code)}
+                                <span>{match.team1_name}</span>
+                              </span>
                               <span className="text-gray-500 mx-2 shrink-0">vs</span>
-                              <span className="truncate text-right">{match.team2_name}</span>
+                              <span className="truncate text-right flex items-center justify-end gap-1">
+                                <span>{match.team2_name}</span>
+                                {renderTeamFlag(match.team2_flag_code)}
+                              </span>
                             </div>
                             <div className="flex items-center justify-between text-[9px] text-gray-400">
                               <span className="truncate">{match.player1_name}</span>
@@ -1203,7 +1269,10 @@ function App() {
                         <div className="grid grid-cols-7 items-center gap-1 text-xs">
                           {/* Team 1 */}
                           <div className="col-span-2 text-right truncate">
-                            <span className="font-bold text-white block truncate">{match.team1_name}</span>
+                            <span className="font-bold text-white flex items-center justify-end gap-1 truncate">
+                              <span>{match.team1_name}</span>
+                              {renderTeamFlag(match.team1_flag_code)}
+                            </span>
                             <span className="text-[9px] text-gray-400 block truncate">{match.player1_name}</span>
                           </div>
                           
@@ -1220,7 +1289,10 @@ function App() {
 
                           {/* Team 2 */}
                           <div className="col-span-2 text-left truncate">
-                            <span className="font-bold text-white block truncate">{match.team2_name}</span>
+                            <span className="font-bold text-white flex items-center justify-start gap-1 truncate">
+                              {renderTeamFlag(match.team2_flag_code)}
+                              <span>{match.team2_name}</span>
+                            </span>
                             <span className="text-[9px] text-gray-400 block truncate">{match.player2_name}</span>
                           </div>
                         </div>
@@ -1325,8 +1397,11 @@ function App() {
                                       }`}
                                     >
                                       <td className="py-2.5 pr-2 font-bold max-w-[120px] truncate text-white">
-                                        <div className="truncate">{team.name}</div>
-                                        <div className="text-[9px] text-gray-500 font-normal truncate">{team.player_name}</div>
+                                        <div className="truncate flex items-center gap-1.5">
+                                          {renderTeamFlag(team.flag_code)}
+                                          <span className="truncate">{team.name}</span>
+                                        </div>
+                                        <div className="text-[9px] text-gray-500 font-normal truncate pl-5.5">{team.player_name}</div>
                                       </td>
                                       <td className="py-2.5 text-center font-semibold text-gray-300">{team.played}</td>
                                       <td className="py-2.5 text-center text-gray-400 font-semibold">
@@ -1354,8 +1429,10 @@ function App() {
                               <div className="text-[9px] font-bold text-ps-neon-pink uppercase mb-2">{m.stage}</div>
                               
                               <div className="flex justify-between items-center mb-1">
-                                <span className="font-bold text-white truncate max-w-[140px]">
-                                  {m.team1_name} <span className="text-[9px] text-gray-400 font-normal">({m.player1_name})</span>
+                                <span className="font-bold text-white flex items-center gap-1.5 truncate max-w-[140px]">
+                                  {renderTeamFlag(m.team1_flag_code)}
+                                  <span className="truncate">{m.team1_name}</span>
+                                  <span className="text-[9px] text-gray-400 font-normal shrink-0">({m.player1_name})</span>
                                 </span>
                                 <span className="font-extrabold text-sm text-ps-neon-blue">
                                   {m.status === 'completed' ? m.score1 : '-'}
@@ -1363,8 +1440,10 @@ function App() {
                               </div>
                               
                               <div className="flex justify-between items-center">
-                                <span className="font-bold text-white truncate max-w-[140px]">
-                                  {m.team2_name} <span className="text-[9px] text-gray-400 font-normal">({m.player2_name})</span>
+                                <span className="font-bold text-white flex items-center gap-1.5 truncate max-w-[140px]">
+                                  {renderTeamFlag(m.team2_flag_code)}
+                                  <span className="truncate">{m.team2_name}</span>
+                                  <span className="text-[9px] text-gray-400 font-normal shrink-0">({m.player2_name})</span>
                                 </span>
                                 <span className="font-extrabold text-sm text-ps-neon-blue">
                                   {m.status === 'completed' ? m.score2 : '-'}
@@ -1401,8 +1480,10 @@ function App() {
                                 </div>
                                 <div>
                                   <div className="font-bold text-white">{player.player_name}</div>
-                                  <div className="text-[9px] text-gray-400">
-                                    {player.team_name} {player.owner_player_name && <span className="text-ps-neon-blue font-bold">({player.owner_player_name})</span>}
+                                  <div className="text-[9px] text-gray-400 flex items-center gap-1">
+                                    {renderTeamFlag(player.flag_code, "w-3.5 h-3.5")}
+                                    <span>{player.team_name}</span>
+                                    {player.owner_player_name && <span className="text-ps-neon-blue font-bold">({player.owner_player_name})</span>}
                                   </div>
                                 </div>
                               </div>
@@ -1433,8 +1514,10 @@ function App() {
                                 </div>
                                 <div>
                                   <div className="font-bold text-white">{player.player_name}</div>
-                                  <div className="text-[9px] text-gray-400">
-                                    {player.team_name} {player.owner_player_name && <span className="text-ps-neon-pink font-bold">({player.owner_player_name})</span>}
+                                  <div className="text-[9px] text-gray-400 flex items-center gap-1">
+                                    {renderTeamFlag(player.flag_code, "w-3.5 h-3.5")}
+                                    <span>{player.team_name}</span>
+                                    {player.owner_player_name && <span className="text-ps-neon-pink font-bold">({player.owner_player_name})</span>}
                                   </div>
                                 </div>
                               </div>
@@ -1608,6 +1691,17 @@ function App() {
                       <option value="Custom">Інше</option>
                     </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Код прапора (flagcdn)</label>
+                  <input
+                    type="text"
+                    value={newTeamFlagCode}
+                    onChange={(e) => setNewTeamFlagCode(e.target.value)}
+                    placeholder="Напр. ua, fr, ar (дволітерний код країни)"
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                  />
                 </div>
 
                 {/* Ratings sliders */}
@@ -2251,7 +2345,10 @@ function App() {
                             : 'bg-ps-dark-card border-ps-dark-item text-gray-300 hover:border-gray-600'
                         }`}
                       >
-                        <div className="font-bold text-xs truncate">{team.name}</div>
+                        <div className="font-bold text-xs truncate flex items-center gap-1.5">
+                          {renderTeamFlag(team.flag_code, "w-3.5 h-3.5")}
+                          <span className="truncate">{team.name}</span>
+                        </div>
                         <div className="text-[9px] text-gray-400 mt-0.5">Рейтинг: {team.overall}</div>
                       </button>
                     );

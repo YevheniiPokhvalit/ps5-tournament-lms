@@ -33,10 +33,55 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Test connection on startup
+// Test connection and run migrations on startup
 pool.query('SELECT NOW()')
-  .then(res => {
+  .then(async res => {
     console.log(`[Database] Connected successfully. DB Server Time: ${res.rows[0].now}`);
+    
+    try {
+      // 1. Add column flag_code to teams table if it doesn't exist
+      await pool.query('ALTER TABLE teams ADD COLUMN IF NOT EXISTS flag_code VARCHAR(10) DEFAULT NULL;');
+      console.log('[Migration] Column flag_code verified/added.');
+
+      // 2. Seed National Teams if they do not exist
+      const nationalTeams = [
+        { name: 'Франція', league: 'Збірні', attack: 86, midfield: 84, defense: 84, overall: 85, flag_code: 'fr', players: ['Kylian Mbappe', 'Antoine Griezmann', 'Ousmane Dembele', 'Marcus Thuram'] },
+        { name: 'Англія', league: 'Збірні', attack: 85, midfield: 85, defense: 83, overall: 84, flag_code: 'gb-eng', players: ['Harry Kane', 'Bukayo Saka', 'Jude Bellingham', 'Phil Foden'] },
+        { name: 'Аргентина', league: 'Збірні', attack: 84, midfield: 83, defense: 82, overall: 83, flag_code: 'ar', players: ['Lionel Messi', 'Julian Alvarez', 'Angel Di Maria', 'Lautaro Martinez'] },
+        { name: 'Іспанія', league: 'Збірні', attack: 82, midfield: 85, defense: 82, overall: 83, flag_code: 'es', players: ['Rodri', 'Lamine Yamal', 'Alvaro Morata', 'Pedri'] },
+        { name: 'Португалія', league: 'Збірні', attack: 84, midfield: 83, defense: 82, overall: 83, flag_code: 'pt', players: ['Cristiano Ronaldo', 'Bruno Fernandes', 'Bernardo Silva', 'Rafael Leao'] },
+        { name: 'Німеччина', league: 'Збірні', attack: 81, midfield: 84, defense: 81, overall: 82, flag_code: 'de', players: ['Florian Wirtz', 'Jamal Musiala', 'Kai Havertz', 'Leroy Sane'] },
+        { name: 'Бразилія', league: 'Збірні', attack: 83, midfield: 81, defense: 81, overall: 82, flag_code: 'br', players: ['Vinicius Junior', 'Rodrygo', 'Neymar Jr', 'Casemiro'] },
+        { name: 'Італія', league: 'Збірні', attack: 80, midfield: 82, defense: 81, overall: 81, flag_code: 'it', players: ['Nicolo Barella', 'Federico Chiesa', 'Gianluigi Donnarumma', 'Alessandro Bastoni'] },
+        { name: 'Нідерланди', league: 'Збірні', attack: 80, midfield: 81, defense: 83, overall: 81, flag_code: 'nl', players: ['Virgil van Dijk', 'Frenkie de Jong', 'Memphis Depay', 'Cody Gakpo'] },
+        { name: 'Україна', league: 'Збірні', attack: 78, midfield: 77, defense: 75, overall: 77, flag_code: 'ua', players: ['Artem Dovbyk', 'Viktor Tsygankov', 'Mykhailo Mudryk', 'Oleksandr Zinchenko'] }
+      ];
+
+      for (const t of nationalTeams) {
+        // Insert team
+        const teamInsert = await pool.query(
+          `INSERT INTO teams (name, league, attack, midfield, defense, overall, flag_code) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7) 
+           ON CONFLICT (name) DO UPDATE SET flag_code = EXCLUDED.flag_code, overall = EXCLUDED.overall
+           RETURNING id;`,
+          [t.name, t.league, t.attack, t.midfield, t.defense, t.overall, t.flag_code]
+        );
+        const teamId = teamInsert.rows[0]?.id;
+        
+        if (teamId) {
+          // Insert players
+          for (const pName of t.players) {
+            await pool.query(
+              'INSERT INTO team_players (team_id, name) VALUES ($1, $2) ON CONFLICT (team_id, name) DO NOTHING;',
+              [teamId, pName]
+            );
+          }
+        }
+      }
+      console.log('[Migration] National teams and players seeded successfully.');
+    } catch (migErr) {
+      console.error('[Migration] Error running migration/seeding:', migErr);
+    }
   })
   .catch(err => {
     console.error('[Database] Connection error:', err.message);
@@ -71,7 +116,7 @@ app.get('/api/health', async (req, res) => {
 
 // POST /api/teams - Create a team with a list of real players
 app.post('/api/teams', async (req, res) => {
-  const { name, league, attack, midfield, defense, overall, players } = req.body;
+  const { name, league, attack, midfield, defense, overall, flag_code, players } = req.body;
   if (!name || !league) {
     return res.status(400).json({ error: 'Team name and league are required' });
   }
@@ -82,8 +127,8 @@ app.post('/api/teams', async (req, res) => {
 
     // Create Team
     const insertTeamQuery = `
-      INSERT INTO teams (name, league, attack, midfield, defense, overall)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO teams (name, league, attack, midfield, defense, overall, flag_code)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *;
     `;
     const teamResult = await client.query(insertTeamQuery, [
@@ -92,7 +137,8 @@ app.post('/api/teams', async (req, res) => {
       parseInt(attack) || 50,
       parseInt(midfield) || 50,
       parseInt(defense) || 50,
-      parseInt(overall) || 50
+      parseInt(overall) || 50,
+      flag_code ? flag_code.trim().toLowerCase() : null
     ]);
     const newTeam = teamResult.rows[0];
 
@@ -740,7 +786,7 @@ app.get('/api/stats', async (req, res) => {
 
     // 1. Fetch Tournament Teams details
     const ttRes = await pool.query(`
-      SELECT tt.team_id, t.name as team_name, p.name as player_name
+      SELECT tt.team_id, t.name as team_name, t.flag_code, p.name as player_name
       FROM tournament_teams tt
       JOIN teams t ON tt.team_id = t.id
       JOIN players p ON tt.original_player_id = p.id
@@ -762,6 +808,7 @@ app.get('/api/stats', async (req, res) => {
       teamMap[t.team_id] = {
         id: t.team_id,
         name: t.team_name,
+        flag_code: t.flag_code,
         player_name: t.player_name,
         played: 0,
         wins: 0,
@@ -841,6 +888,8 @@ app.get('/api/stats', async (req, res) => {
         m.status,
         t1.name as team1_name,
         t2.name as team2_name,
+        t1.flag_code as team1_flag_code,
+        t2.flag_code as team2_flag_code,
         p1.name as player1_name,
         p2.name as player2_name
       FROM matches m
@@ -858,6 +907,7 @@ app.get('/api/stats', async (req, res) => {
         tp.id as player_id, 
         tp.name as player_name, 
         t.name as team_name, 
+        t.flag_code,
         p.name as owner_player_name,
         COUNT(g.id) as goals_count
       FROM goals g
@@ -867,7 +917,7 @@ app.get('/api/stats', async (req, res) => {
       LEFT JOIN tournament_teams tt ON tt.tournament_id = m.tournament_id AND tt.team_id = t.id
       LEFT JOIN players p ON tt.original_player_id = p.id
       WHERE m.tournament_id = $1
-      GROUP BY tp.id, tp.name, t.name, p.name
+      GROUP BY tp.id, tp.name, t.name, t.flag_code, p.name
       ORDER BY goals_count DESC, tp.name ASC
       LIMIT 10;
     `, [tournament_id]);
@@ -878,6 +928,7 @@ app.get('/api/stats', async (req, res) => {
         tp.id as player_id, 
         tp.name as player_name, 
         t.name as team_name, 
+        t.flag_code,
         p.name as owner_player_name,
         COUNT(g.id) as assists_count
       FROM goals g
@@ -887,7 +938,7 @@ app.get('/api/stats', async (req, res) => {
       LEFT JOIN tournament_teams tt ON tt.tournament_id = m.tournament_id AND tt.team_id = t.id
       LEFT JOIN players p ON tt.original_player_id = p.id
       WHERE m.tournament_id = $1
-      GROUP BY tp.id, tp.name, t.name, p.name
+      GROUP BY tp.id, tp.name, t.name, t.flag_code, p.name
       ORDER BY assists_count DESC, tp.name ASC
       LIMIT 10;
     `, [tournament_id]);
@@ -1000,6 +1051,8 @@ app.get('/api/matches', async (req, res) => {
         m.current_player2_id,
         t1.name as team1_name,
         t2.name as team2_name,
+        t1.flag_code as team1_flag_code,
+        t2.flag_code as team2_flag_code,
         p1.name as player1_name,
         p2.name as player2_name,
         m.created_at

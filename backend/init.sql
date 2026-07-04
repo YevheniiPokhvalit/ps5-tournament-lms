@@ -29,7 +29,7 @@ AFTER INSERT ON players
 FOR EACH ROW
 EXECUTE FUNCTION create_player_balance();
 
--- 3. Teams (id, name, league, attack, midfield, defense, overall)
+-- 3. Teams (id, name, league, attack, midfield, defense, overall, flag_code)
 CREATE TABLE IF NOT EXISTS teams (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS teams (
     attack INT NOT NULL CHECK (attack BETWEEN 0 AND 100),
     midfield INT NOT NULL CHECK (midfield BETWEEN 0 AND 100),
     defense INT NOT NULL CHECK (defense BETWEEN 0 AND 100),
-    overall INT NOT NULL CHECK (overall BETWEEN 0 AND 100)
+    overall INT NOT NULL CHECK (overall BETWEEN 0 AND 100),
+    flag_code VARCHAR(10) DEFAULT NULL
 );
 
 -- 4. Team Players (real footballers for the match logs)
