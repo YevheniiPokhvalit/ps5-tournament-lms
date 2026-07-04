@@ -32,6 +32,9 @@ window.fetch = function (url, options = {}) {
 
 function App() {
   const [activeTab, setActiveTab] = useState('match-center');
+  const [selectedTournamentId, setSelectedTournamentId] = useState(null);
+  const [showCreateTournamentModal, setShowCreateTournamentModal] = useState(false);
+  const [resolverTournamentId, setResolverTournamentId] = useState('');
   
   // Shared state
   const [players, setPlayers] = useState([]);
@@ -133,7 +136,7 @@ function App() {
       setMatches(matchesData);
 
       // 5. Fetch stats
-      const statsRes = await fetch(`${API_URL}/api/stats`);
+      const statsRes = await fetch(selectedTournamentId ? `${API_URL}/api/stats?tournament_id=${selectedTournamentId}` : `${API_URL}/api/stats`);
       const statsData = await statsRes.json();
       setStats(statsData);
 
@@ -148,6 +151,17 @@ function App() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (selectedTournamentId) {
+      setLoading(true);
+      fetch(`${API_URL}/api/stats?tournament_id=${selectedTournamentId}`)
+        .then(res => res.json())
+        .then(data => setStats(data))
+        .catch(err => console.error(err))
+        .finally(() => setLoading(false));
+    }
+  }, [selectedTournamentId]);
 
   // Fetch players for selected team in editor
   useEffect(() => {
@@ -571,9 +585,15 @@ function App() {
   // =========================================================================
 
   // Live Match
-  const liveMatch = matches.find(m => m.status === 'live');
-  const pendingMatches = matches.filter(m => m.status === 'pending');
-  const completedMatches = matches.filter(m => m.status === 'completed');
+  const liveMatch = selectedTournamentId 
+    ? matches.find(m => m.tournament_id === selectedTournamentId && m.status === 'live') 
+    : null;
+  const pendingMatches = selectedTournamentId 
+    ? matches.filter(m => m.tournament_id === selectedTournamentId && m.status === 'pending') 
+    : [];
+  const completedMatches = selectedTournamentId 
+    ? matches.filter(m => m.tournament_id === selectedTournamentId && m.status === 'completed') 
+    : [];
 
   // Stats tab selection
   const [activeStatsTab, setActiveStatsTab] = useState('tables');
@@ -623,231 +643,320 @@ function App() {
         {/* ========================================================================= */}
         {/* TAB 1: MATCH CENTER */}
         {/* ========================================================================= */}
+        {/* ========================================================================= */}
+        {/* TAB 1: MATCH CENTER & TOURNAMENTS LIST */}
+        {/* ========================================================================= */}
         {activeTab === 'match-center' && (
           <div className="space-y-6">
-            
-            {/* NOW PLAYING BILLBOARD */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Зараз Грають</h2>
-                {liveMatch && (
-                  <span className="bg-ps-green/10 border border-ps-green text-ps-green text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest animate-neon-pulse flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-ps-green animate-ping"></span> Live
-                  </span>
-                )}
-              </div>
-              
-              {liveMatch ? (
-                <div className="bg-ps-dark-card border border-ps-neon-blue rounded-2xl p-5 shadow-neon-blue relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-ps-neon-blue/10 to-transparent rounded-bl-full pointer-events-none"></div>
-                  
-                  <div className="text-center text-[10px] text-ps-neon-blue font-bold uppercase tracking-widest mb-3">
-                    {liveMatch.stage}
-                  </div>
-
-                  <div className="grid grid-cols-5 items-center gap-2">
-                    {/* Team 1 */}
-                    <div className="col-span-2 text-center">
-                      <div className="w-12 h-12 mx-auto rounded-xl bg-ps-blue/20 border border-ps-blue/40 flex items-center justify-center font-bold text-white text-lg mb-2">
-                        {liveMatch.team1_name.slice(0,2).toUpperCase()}
-                      </div>
-                      <h3 className="font-bold text-sm text-white truncate">{liveMatch.team1_name}</h3>
-                      <p className="text-[10px] text-gray-400 mt-0.5 truncate">{liveMatch.player1_name}</p>
-                    </div>
-
-                    {/* Score */}
-                    <div className="col-span-1 text-center">
-                      <div className="font-extrabold text-2xl text-ps-neon-blue neon-glow-text-blue">
-                        {liveMatch.score1 !== null ? liveMatch.score1 : 0} : {liveMatch.score2 !== null ? liveMatch.score2 : 0}
-                      </div>
-                    </div>
-
-                    {/* Team 2 */}
-                    <div className="col-span-2 text-center">
-                      <div className="w-12 h-12 mx-auto rounded-xl bg-ps-neon-pink/20 border border-ps-neon-pink/40 flex items-center justify-center font-bold text-white text-lg mb-2">
-                        {liveMatch.team2_name.slice(0,2).toUpperCase()}
-                      </div>
-                      <h3 className="font-bold text-sm text-white truncate">{liveMatch.team2_name}</h3>
-                      <p className="text-[10px] text-gray-400 mt-0.5 truncate">{liveMatch.player2_name}</p>
-                    </div>
-                  </div>
-                  
-                  {/* Actions for Live Match */}
-                  <div className="mt-4 pt-4 border-t border-ps-dark-item flex gap-2">
-                    <button 
-                      onClick={() => openCloseMatchModal(liveMatch)}
-                      className="flex-1 bg-ps-neon-blue/10 border border-ps-neon-blue/40 hover:bg-ps-neon-blue hover:text-black text-ps-neon-blue text-xs font-bold py-2 px-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-4 h-4" /> Закрити матч
-                    </button>
-                  </div>
+            {selectedTournamentId === null ? (
+              // 1. TOURNAMENTS LIST VIEW
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Список турнірів</h2>
+                  <button
+                    onClick={() => setShowCreateTournamentModal(true)}
+                    className="flex items-center gap-1 bg-ps-blue hover:bg-ps-blue/90 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg shadow-neon-blue transition-all"
+                  >
+                    <Plus className="w-3 h-3" /> Створити Турнір
+                  </button>
                 </div>
-              ) : pendingMatches.length > 0 ? (
-                // If no active live match, show next match as spotlight card with option to start
-                <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-5 relative overflow-hidden">
-                  <div className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-3">
-                    Наступний матч програми
-                  </div>
 
-                  <div className="grid grid-cols-5 items-center gap-2">
-                    {/* Team 1 */}
-                    <div className="col-span-2 text-center opacity-70">
-                      <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2">
-                        {pendingMatches[0].team1_name.slice(0,2).toUpperCase()}
-                      </div>
-                      <h3 className="font-bold text-sm text-white truncate">{pendingMatches[0].team1_name}</h3>
-                      <p className="text-[10px] text-gray-400 mt-0.5 truncate">{pendingMatches[0].player1_name}</p>
-                    </div>
+                <div className="space-y-2">
+                  {tournaments.map(t => {
+                    const tMatches = matches.filter(m => m.tournament_id === t.id);
+                    let statusLabel = 'Створено';
+                    let statusClass = 'bg-gray-500/10 border-gray-500 text-gray-400';
 
-                    {/* VS */}
-                    <div className="col-span-1 text-center">
-                      <div className="font-extrabold text-lg text-gray-500">VS</div>
-                    </div>
+                    if (tMatches.length > 0) {
+                      const completedCount = tMatches.filter(m => m.status === 'completed').length;
+                      if (completedCount === tMatches.length) {
+                        statusLabel = 'Завершено';
+                        statusClass = 'bg-ps-green/10 border-ps-green text-ps-green';
+                      } else {
+                        statusLabel = 'Активний';
+                        statusClass = 'bg-ps-blue/10 border-ps-blue text-ps-neon-blue shadow-neon-blue';
+                      }
+                    }
 
-                    {/* Team 2 */}
-                    <div className="col-span-2 text-center opacity-70">
-                      <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2">
-                        {pendingMatches[0].team2_name.slice(0,2).toUpperCase()}
-                      </div>
-                      <h3 className="font-bold text-sm text-white truncate">{pendingMatches[0].team2_name}</h3>
-                      <p className="text-[10px] text-gray-400 mt-0.5 truncate">{pendingMatches[0].player2_name}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-ps-dark-item">
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const res = await fetch(`${API_URL}/api/matches/${pendingMatches[0].id}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ score1: null, score2: null, status: 'live' }) // Change to live without scores
-                          });
-                          if (!res.ok) throw new Error('Помилка активації');
-                          triggerSuccess('Матч запущено в ефір!');
-                          fetchData();
-                        } catch (err) {
-                          triggerError(err.message);
-                        }
-                      }}
-                      className="w-full bg-ps-blue hover:bg-ps-blue/90 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-neon-blue transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <Play className="w-4 h-4 fill-white" /> РОЗПОЧАТИ МАТЧ
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-ps-dark-card border border-ps-dark-item border-dashed rounded-2xl p-8 text-center text-gray-500">
-                  <Gamepad2 className="w-8 h-8 mx-auto mb-2 text-gray-600" />
-                  <p className="text-xs">Наразі немає запланованих матчів.</p>
-                  <p className="text-[10px] mt-1 text-ps-neon-blue">Перейдіть в панель адміна та згенеруйте новий турнір!</p>
-                </div>
-              )}
-            </div>
-
-            {/* NEXT IN LINE (QUEUE) */}
-            <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Наступні в черзі</h2>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {pendingMatches.slice(liveMatch ? 0 : 1).map((match, index) => (
-                  <div key={match.id} className="bg-ps-dark-card border border-ps-dark-item hover:border-ps-blue/30 rounded-xl p-3 flex items-center justify-between gap-2 transition-all">
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="text-[10px] font-bold text-gray-500 w-5 text-center shrink-0">
-                        #{index + (liveMatch ? 1 : 2)}
-                      </div>
-                      
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between text-xs font-bold text-white mb-0.5">
-                          <span className="truncate">{match.team1_name}</span>
-                          <span className="text-gray-500 mx-2 shrink-0">vs</span>
-                          <span className="truncate text-right">{match.team2_name}</span>
+                    return (
+                      <div
+                        key={t.id}
+                        onClick={() => setSelectedTournamentId(t.id)}
+                        className="bg-ps-dark-card border border-ps-dark-item hover:border-ps-blue/40 rounded-xl p-4 flex items-center justify-between gap-3 cursor-pointer transition-all duration-300"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-extrabold text-sm text-white truncate">{t.name}</h3>
+                          <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
+                            <span className="uppercase font-bold text-ps-neon-blue">{t.type}</span>
+                            <span>•</span>
+                            <span>{new Date(t.date).toLocaleDateString()}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between text-[9px] text-gray-400">
-                          <span className="truncate">{match.player1_name}</span>
-                          <span className="text-ps-neon-blue shrink-0 uppercase text-[8px] tracking-wider">{match.stage}</span>
-                          <span className="truncate text-right">{match.player2_name}</span>
-                        </div>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 border rounded-full uppercase tracking-wider ${statusClass} shrink-0`}>
+                          {statusLabel}
+                        </span>
                       </div>
-                    </div>
-                    
-                    <button 
-                      onClick={() => {
-                        // Switch status of this match to live directly
-                        fetch(`${API_URL}/api/matches/${match.id}`, {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ score1: null, score2: null, status: 'live' })
-                        })
-                        .then(() => {
-                          triggerSuccess('Матч виведено в Live!');
-                          fetchData();
-                        })
-                        .catch(err => triggerError(err.message));
-                      }}
-                      className="p-1.5 rounded-lg bg-ps-dark-item hover:bg-ps-blue text-ps-neon-blue hover:text-white transition-all shrink-0"
-                      title="Запустити"
-                    >
-                      <Play className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-                
-                {pendingMatches.length === 0 && (
-                  <div className="text-center text-xs text-gray-600 py-4 bg-ps-dark-card/50 rounded-xl border border-ps-dark-item border-dashed">
-                    Черга пуста
-                  </div>
-                )}
-              </div>
-            </div>
+                    );
+                  })}
 
-            {/* MATCH HISTORY */}
-            <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Історія матчів</h2>
-              <div className="space-y-2">
-                {completedMatches.map(match => (
-                  <div key={match.id} className="bg-ps-dark-card border border-ps-dark-item rounded-xl p-3 flex flex-col gap-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">{match.stage}</span>
-                      <span className="text-[9px] text-gray-500">
-                        {new Date(match.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {tournaments.length === 0 && (
+                    <div className="text-center text-xs text-gray-500 py-12 bg-ps-dark-card border border-ps-dark-item border-dashed rounded-2xl">
+                      <Gamepad2 className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+                      <p>Немає створених турнірів.</p>
+                      <button
+                        onClick={() => setShowCreateTournamentModal(true)}
+                        className="mt-3 text-[10px] bg-ps-blue/20 hover:bg-ps-blue text-ps-neon-blue font-bold px-4 py-2 rounded-xl transition-all"
+                      >
+                        Створити перший турнір
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              // 2. TOURNAMENT MATCH CENTER DETAILS
+              <div className="space-y-6">
+                {/* Back button and title */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      setSelectedTournamentId(null);
+                      setStats(null);
+                    }}
+                    className="p-1.5 rounded-lg bg-ps-dark-item text-gray-400 hover:text-white transition-colors"
+                  >
+                    ← Назад
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-extrabold text-sm text-white truncate">
+                      {tournaments.find(t => t.id === selectedTournamentId)?.name}
+                    </h2>
+                    <p className="text-[9px] text-ps-neon-blue font-bold uppercase tracking-widest mt-0.5">
+                      Матч-Центр
+                    </p>
+                  </div>
+                </div>
+
+                {/* NOW PLAYING BILLBOARD */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Зараз Грають</h2>
+                    {liveMatch && (
+                      <span className="bg-ps-green/10 border border-ps-green text-ps-green text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest animate-neon-pulse flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-ps-green animate-ping"></span> Live
                       </span>
-                    </div>
+                    )}
+                  </div>
+                  
+                  {liveMatch ? (
+                    <div className="bg-ps-dark-card border border-ps-neon-blue rounded-2xl p-5 shadow-neon-blue relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-ps-neon-blue/10 to-transparent rounded-bl-full pointer-events-none"></div>
+                      
+                      <div className="text-center text-[10px] text-ps-neon-blue font-bold uppercase tracking-widest mb-3">
+                        {liveMatch.stage}
+                      </div>
 
-                    <div className="grid grid-cols-7 items-center gap-1 text-xs">
-                      {/* Team 1 */}
-                      <div className="col-span-2 text-right truncate">
-                        <span className="font-bold text-white block truncate">{match.team1_name}</span>
-                        <span className="text-[9px] text-gray-400 block truncate">{match.player1_name}</span>
+                      <div className="grid grid-cols-5 items-center gap-2">
+                        {/* Team 1 */}
+                        <div className="col-span-2 text-center">
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-blue/20 border border-ps-blue/40 flex items-center justify-center font-bold text-white text-lg mb-2">
+                            {liveMatch.team1_name.slice(0,2).toUpperCase()}
+                          </div>
+                          <h3 className="font-bold text-sm text-white truncate">{liveMatch.team1_name}</h3>
+                          <p className="text-[10px] text-gray-400 mt-0.5 truncate">{liveMatch.player1_name}</p>
+                        </div>
+
+                        {/* Score */}
+                        <div className="col-span-1 text-center">
+                          <div className="font-extrabold text-2xl text-ps-neon-blue neon-glow-text-blue">
+                            {liveMatch.score1 !== null ? liveMatch.score1 : 0} : {liveMatch.score2 !== null ? liveMatch.score2 : 0}
+                          </div>
+                        </div>
+
+                        {/* Team 2 */}
+                        <div className="col-span-2 text-center">
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-neon-pink/20 border border-ps-neon-pink/40 flex items-center justify-center font-bold text-white text-lg mb-2">
+                            {liveMatch.team2_name.slice(0,2).toUpperCase()}
+                          </div>
+                          <h3 className="font-bold text-sm text-white truncate">{liveMatch.team2_name}</h3>
+                          <p className="text-[10px] text-gray-400 mt-0.5 truncate">{liveMatch.player2_name}</p>
+                        </div>
                       </div>
                       
-                      {/* Score */}
-                      <div className="col-span-3 text-center flex items-center justify-center gap-2">
-                        <div className="px-2 py-0.5 rounded bg-ps-dark-item border border-ps-dark-item font-extrabold text-white">
-                          {match.score1}
-                        </div>
-                        <span className="text-gray-500 font-bold">:</span>
-                        <div className="px-2 py-0.5 rounded bg-ps-dark-item border border-ps-dark-item font-extrabold text-white">
-                          {match.score2}
-                        </div>
-                      </div>
-
-                      {/* Team 2 */}
-                      <div className="col-span-2 text-left truncate">
-                        <span className="font-bold text-white block truncate">{match.team2_name}</span>
-                        <span className="text-[9px] text-gray-400 block truncate">{match.player2_name}</span>
+                      {/* Actions for Live Match */}
+                      <div className="mt-4 pt-4 border-t border-ps-dark-item flex gap-2">
+                        <button 
+                          onClick={() => openCloseMatchModal(liveMatch)}
+                          className="flex-1 bg-ps-neon-blue/10 border border-ps-neon-blue/40 hover:bg-ps-neon-blue hover:text-black text-ps-neon-blue text-xs font-bold py-2 px-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5"
+                        >
+                          <CheckCircle2 className="w-4 h-4" /> Закрити матч
+                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ) : pendingMatches.length > 0 ? (
+                    <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-5 relative overflow-hidden">
+                      <div className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-3">
+                        Наступний матч програми
+                      </div>
 
-                {completedMatches.length === 0 && (
-                  <div className="text-center text-xs text-gray-600 py-4">
-                    Немає зіграних матчів.
+                      <div className="grid grid-cols-5 items-center gap-2">
+                        {/* Team 1 */}
+                        <div className="col-span-2 text-center opacity-70">
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2">
+                            {pendingMatches[0].team1_name.slice(0,2).toUpperCase()}
+                          </div>
+                          <h3 className="font-bold text-sm text-white truncate">{pendingMatches[0].team1_name}</h3>
+                          <p className="text-[10px] text-gray-400 mt-0.5 truncate">{pendingMatches[0].player1_name}</p>
+                        </div>
+
+                        {/* VS */}
+                        <div className="col-span-1 text-center">
+                          <div className="font-extrabold text-lg text-gray-500">VS</div>
+                        </div>
+
+                        {/* Team 2 */}
+                        <div className="col-span-2 text-center opacity-70">
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2">
+                            {pendingMatches[0].team2_name.slice(0,2).toUpperCase()}
+                          </div>
+                          <h3 className="font-bold text-sm text-white truncate">{pendingMatches[0].team2_name}</h3>
+                          <p className="text-[10px] text-gray-400 mt-0.5 truncate">{pendingMatches[0].player2_name}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-4 border-t border-ps-dark-item">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${API_URL}/api/matches/${pendingMatches[0].id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ score1: null, score2: null, status: 'live' })
+                              });
+                              if (!res.ok) throw new Error('Помилка активації');
+                              triggerSuccess('Матч запущено в ефір!');
+                              fetchData();
+                            } catch (err) {
+                              triggerError(err.message);
+                            }
+                          }}
+                          className="w-full bg-ps-blue hover:bg-ps-blue/90 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-neon-blue transition-all flex items-center justify-center gap-1.5"
+                        >
+                          <Play className="w-4 h-4 fill-white" /> РОЗПОЧАТИ МАТЧ
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-ps-dark-card border border-ps-dark-item border-dashed rounded-2xl p-8 text-center text-gray-500">
+                      <Gamepad2 className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+                      <p className="text-xs">Наразі немає запланованих матчів.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* NEXT IN LINE (QUEUE) */}
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Наступні в черзі</h2>
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {pendingMatches.slice(liveMatch ? 0 : 1).map((match, index) => (
+                      <div key={match.id} className="bg-ps-dark-card border border-ps-dark-item hover:border-ps-blue/30 rounded-xl p-3 flex items-center justify-between gap-2 transition-all">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div className="text-[10px] font-bold text-gray-500 w-5 text-center shrink-0">
+                            #{index + (liveMatch ? 1 : 2)}
+                          </div>
+                          
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between text-xs font-bold text-white mb-0.5">
+                              <span className="truncate">{match.team1_name}</span>
+                              <span className="text-gray-500 mx-2 shrink-0">vs</span>
+                              <span className="truncate text-right">{match.team2_name}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[9px] text-gray-400">
+                              <span className="truncate">{match.player1_name}</span>
+                              <span className="text-ps-neon-blue shrink-0 uppercase text-[8px] tracking-wider">{match.stage}</span>
+                              <span className="truncate text-right">{match.player2_name}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <button 
+                          onClick={() => {
+                            fetch(`${API_URL}/api/matches/${match.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ score1: null, score2: null, status: 'live' })
+                            })
+                            .then(() => {
+                              triggerSuccess('Матч виведено в Live!');
+                              fetchData();
+                            })
+                            .catch(err => triggerError(err.message));
+                          }}
+                          className="p-1.5 rounded-lg bg-ps-dark-item hover:bg-ps-blue text-ps-neon-blue hover:text-white transition-all shrink-0"
+                          title="Запустити"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    
+                    {pendingMatches.length === 0 && (
+                      <div className="text-center text-xs text-gray-600 py-4 bg-ps-dark-card/50 rounded-xl border border-ps-dark-item border-dashed">
+                        Черга пуста
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+
+                {/* MATCH HISTORY */}
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Історія матчів</h2>
+                  <div className="space-y-2">
+                    {completedMatches.map(match => (
+                      <div key={match.id} className="bg-ps-dark-card border border-ps-dark-item rounded-xl p-3 flex flex-col gap-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">{match.stage}</span>
+                          <span className="text-[9px] text-gray-500">
+                            {new Date(match.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-7 items-center gap-1 text-xs">
+                          {/* Team 1 */}
+                          <div className="col-span-2 text-right truncate">
+                            <span className="font-bold text-white block truncate">{match.team1_name}</span>
+                            <span className="text-[9px] text-gray-400 block truncate">{match.player1_name}</span>
+                          </div>
+                          
+                          {/* Score */}
+                          <div className="col-span-3 text-center flex items-center justify-center gap-2">
+                            <div className="px-2 py-0.5 rounded bg-ps-dark-item border border-ps-dark-item font-extrabold text-white">
+                              {match.score1}
+                            </div>
+                            <span className="text-gray-500 font-bold">:</span>
+                            <div className="px-2 py-0.5 rounded bg-ps-dark-item border border-ps-dark-item font-extrabold text-white">
+                              {match.score2}
+                            </div>
+                          </div>
+
+                          {/* Team 2 */}
+                          <div className="col-span-2 text-left truncate">
+                            <span className="font-bold text-white block truncate">{match.team2_name}</span>
+                            <span className="text-[9px] text-gray-400 block truncate">{match.player2_name}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {completedMatches.length === 0 && (
+                      <div className="text-center text-xs text-gray-600 py-4">
+                        Немає зіграних матчів.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-
+            )}
           </div>
         )}
 
@@ -856,224 +965,238 @@ function App() {
         {/* ========================================================================= */}
         {activeTab === 'stats' && (
           <div className="space-y-6">
-            
-            {/* SUB-TABS */}
-            <div className="flex border-b border-ps-dark-item p-0.5 bg-ps-dark-card rounded-xl">
-              <button
-                onClick={() => setActiveStatsTab('tables')}
-                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
-                  activeStatsTab === 'tables' 
-                    ? 'bg-ps-blue text-white shadow-neon-blue' 
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Турнірна Таблиця
-              </button>
-              <button
-                onClick={() => setActiveStatsTab('scorers')}
-                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
-                  activeStatsTab === 'scorers' 
-                    ? 'bg-ps-blue text-white shadow-neon-blue' 
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Бомбардири
-              </button>
-              <button
-                onClick={() => setActiveStatsTab('coins')}
-                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
-                  activeStatsTab === 'coins' 
-                    ? 'bg-ps-blue text-white shadow-neon-blue' 
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Рейтинг Коїнів
-              </button>
-            </div>
+            {selectedTournamentId === null ? (
+              <div className="text-center text-xs text-gray-500 py-16 bg-ps-dark-card border border-ps-dark-item border-dashed rounded-2xl p-6">
+                <Trophy className="w-10 h-10 mx-auto mb-3 text-ps-neon-blue animate-pulse" />
+                <h3 className="font-extrabold text-sm text-white mb-1">Статистику не обрано</h3>
+                <p className="leading-relaxed">Будь ласка, оберіть турнір у розділі <strong>«Матч-Центр»</strong>, щоб переглянути турнірну таблицю, бомбардирів та баланс коїнів.</p>
+                <button
+                  onClick={() => setActiveTab('match-center')}
+                  className="mt-4 text-[10px] bg-ps-blue/20 hover:bg-ps-blue text-ps-neon-blue font-bold px-4 py-2 rounded-xl transition-all"
+                >
+                  Перейти до вибору турніру
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* SUB-TABS */}
+                <div className="flex border-b border-ps-dark-item p-0.5 bg-ps-dark-card rounded-xl">
+                  <button
+                    onClick={() => setActiveStatsTab('tables')}
+                    className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
+                      activeStatsTab === 'tables' 
+                        ? 'bg-ps-blue text-white shadow-neon-blue' 
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Турнірна Таблиця
+                  </button>
+                  <button
+                    onClick={() => setActiveStatsTab('scorers')}
+                    className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
+                      activeStatsTab === 'scorers' 
+                        ? 'bg-ps-blue text-white shadow-neon-blue' 
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Бомбардири
+                  </button>
+                  <button
+                    onClick={() => setActiveStatsTab('coins')}
+                    className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
+                      activeStatsTab === 'coins' 
+                        ? 'bg-ps-blue text-white shadow-neon-blue' 
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Рейтинг Коїнів
+                  </button>
+                </div>
 
-            {/* TAB: TABLES & STANDINGS */}
-            {activeStatsTab === 'tables' && (
-              <div className="space-y-6">
-                {stats?.groupStandings && Object.keys(stats.groupStandings).length > 0 ? (
-                  Object.keys(stats.groupStandings).map(groupName => (
-                    <div key={groupName} className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
-                      <h3 className="text-xs font-extrabold uppercase tracking-widest text-ps-neon-blue mb-3">
-                        {groupName}
-                      </h3>
-                      
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-[11px] text-left">
-                          <thead>
-                            <tr className="text-gray-500 border-b border-ps-dark-item pb-2 uppercase text-[9px] tracking-wider">
-                              <th className="py-1.5 font-bold">Команда</th>
-                              <th className="py-1.5 font-bold text-center w-8">І</th>
-                              <th className="py-1.5 font-bold text-center w-8">РМ</th>
-                              <th className="py-1.5 font-bold text-center w-8">О</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {stats.groupStandings[groupName].map((team, idx) => (
-                              <tr 
-                                key={team.id} 
-                                className={`border-b border-ps-dark-item/50 last:border-b-0 ${
-                                  idx < 2 ? 'bg-ps-blue/5' : ''
-                                }`}
-                              >
-                                <td className="py-2.5 pr-2 font-bold max-w-[120px] truncate text-white">
-                                  <div className="truncate">{team.name}</div>
-                                  <div className="text-[9px] text-gray-500 font-normal truncate">{team.player_name}</div>
-                                </td>
-                                <td className="py-2.5 text-center font-semibold text-gray-300">{team.played}</td>
-                                <td className="py-2.5 text-center text-gray-400 font-semibold">
-                                  {team.gd > 0 ? `+${team.gd}` : team.gd}
-                                </td>
-                                <td className={`py-2.5 text-center font-bold text-sm ${idx < 2 ? 'text-ps-neon-blue' : 'text-white'}`}>
-                                  {team.points}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))
-                ) : stats?.playoffMatches && stats.playoffMatches.length > 0 ? (
-                  <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
-                    <h3 className="text-xs font-extrabold uppercase tracking-widest text-ps-neon-pink mb-3">
-                      Сітка Плей-оф (Playoffs)
-                    </h3>
-                    <div className="space-y-3">
-                      {stats.playoffMatches.map(m => (
-                        <div key={m.id} className="bg-ps-dark-item border border-ps-dark-item rounded-xl p-3 text-xs">
-                          <div className="text-[9px] font-bold text-ps-neon-pink uppercase mb-2">{m.stage}</div>
+                {/* TAB: TABLES & STANDINGS */}
+                {activeStatsTab === 'tables' && (
+                  <div className="space-y-6">
+                    {stats?.groupStandings && Object.keys(stats.groupStandings).length > 0 ? (
+                      Object.keys(stats.groupStandings).map(groupName => (
+                        <div key={groupName} className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                          <h3 className="text-xs font-extrabold uppercase tracking-widest text-ps-neon-blue mb-3">
+                            {groupName}
+                          </h3>
                           
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-bold text-white truncate max-w-[140px]">
-                              {m.team1_name} <span className="text-[9px] text-gray-400 font-normal">({m.player1_name})</span>
-                            </span>
-                            <span className="font-extrabold text-sm text-ps-neon-blue">
-                              {m.status === 'completed' ? m.score1 : '-'}
-                            </span>
-                          </div>
-                          
-                          <div className="flex justify-between items-center">
-                            <span className="font-bold text-white truncate max-w-[140px]">
-                              {m.team2_name} <span className="text-[9px] text-gray-400 font-normal">({m.player2_name})</span>
-                            </span>
-                            <span className="font-extrabold text-sm text-ps-neon-blue">
-                              {m.status === 'completed' ? m.score2 : '-'}
-                            </span>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-[11px] text-left">
+                              <thead>
+                                <tr className="text-gray-500 border-b border-ps-dark-item pb-2 uppercase text-[9px] tracking-wider">
+                                  <th className="py-1.5 font-bold">Команда</th>
+                                  <th className="py-1.5 font-bold text-center w-8">І</th>
+                                  <th className="py-1.5 font-bold text-center w-8">РМ</th>
+                                  <th className="py-1.5 font-bold text-center w-8">О</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {stats.groupStandings[groupName].map((team, idx) => (
+                                  <tr 
+                                    key={team.id} 
+                                    className={`border-b border-ps-dark-item/50 last:border-b-0 ${
+                                      idx < 2 ? 'bg-ps-blue/5' : ''
+                                    }`}
+                                  >
+                                    <td className="py-2.5 pr-2 font-bold max-w-[120px] truncate text-white">
+                                      <div className="truncate">{team.name}</div>
+                                      <div className="text-[9px] text-gray-500 font-normal truncate">{team.player_name}</div>
+                                    </td>
+                                    <td className="py-2.5 text-center font-semibold text-gray-300">{team.played}</td>
+                                    <td className="py-2.5 text-center text-gray-400 font-semibold">
+                                      {team.gd > 0 ? `+${team.gd}` : team.gd}
+                                    </td>
+                                    <td className={`py-2.5 text-center font-bold text-sm ${idx < 2 ? 'text-ps-neon-blue' : 'text-white'}`}>
+                                      {team.points}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center text-xs text-gray-500 py-8 bg-ps-dark-card rounded-2xl border border-ps-dark-item">
-                    Дані статистики недоступні. Спочатку створіть турнір!
+                      ))
+                    ) : stats?.playoffMatches && stats.playoffMatches.length > 0 ? (
+                      <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                        <h3 className="text-xs font-extrabold uppercase tracking-widest text-ps-neon-pink mb-3">
+                          Сітка Плей-оф (Playoffs)
+                        </h3>
+                        <div className="space-y-3">
+                          {stats.playoffMatches.map(m => (
+                            <div key={m.id} className="bg-ps-dark-item border border-ps-dark-item rounded-xl p-3 text-xs">
+                              <div className="text-[9px] font-bold text-ps-neon-pink uppercase mb-2">{m.stage}</div>
+                              
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-white truncate max-w-[140px]">
+                                  {m.team1_name} <span className="text-[9px] text-gray-400 font-normal">({m.player1_name})</span>
+                                </span>
+                                <span className="font-extrabold text-sm text-ps-neon-blue">
+                                  {m.status === 'completed' ? m.score1 : '-'}
+                                </span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold text-white truncate max-w-[140px]">
+                                  {m.team2_name} <span className="text-[9px] text-gray-400 font-normal">({m.player2_name})</span>
+                                </span>
+                                <span className="font-extrabold text-sm text-ps-neon-blue">
+                                  {m.status === 'completed' ? m.score2 : '-'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center text-xs text-gray-500 py-8 bg-ps-dark-card rounded-2xl border border-ps-dark-item">
+                        Дані статистики недоступні.
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* TAB: SCORERS & ASSISTANTS */}
-            {activeStatsTab === 'scorers' && (
-              <div className="grid grid-cols-1 gap-6">
-                {/* Scorers */}
-                <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue mb-3">
-                    ⚽ Золота Бутса (Бомбардири)
-                  </h3>
-                  
-                  <div className="space-y-2">
-                    {stats?.topScorers && stats.topScorers.length > 0 ? (
-                      stats.topScorers.map((player, idx) => (
-                        <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2 last:border-b-0 text-xs">
-                          <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded bg-ps-dark-item text-[10px] font-bold text-gray-400 flex items-center justify-center">
-                              {idx + 1}
+                {/* TAB: SCORERS & ASSISTANTS */}
+                {activeStatsTab === 'scorers' && (
+                  <div className="grid grid-cols-1 gap-6">
+                    {/* Scorers */}
+                    <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                      <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue mb-3">
+                        ⚽ Золота Бутса (Бомбардири)
+                      </h3>
+                      
+                      <div className="space-y-2">
+                        {stats?.topScorers && stats.topScorers.length > 0 ? (
+                          stats.topScorers.map((player, idx) => (
+                            <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2 last:border-b-0 text-xs">
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded bg-ps-dark-item text-[10px] font-bold text-gray-400 flex items-center justify-center">
+                                  {idx + 1}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-white">{player.player_name}</div>
+                                  <div className="text-[9px] text-gray-400">{player.team_name}</div>
+                                </div>
+                              </div>
+                              <div className="font-extrabold text-ps-neon-blue text-sm">
+                                {player.goals_count} <span className="text-[9px] font-normal text-gray-500">Гол(ів)</span>
+                              </div>
                             </div>
-                            <div>
-                              <div className="font-bold text-white">{player.player_name}</div>
-                              <div className="text-[9px] text-gray-400">{player.team_name}</div>
-                            </div>
-                          </div>
-                          <div className="font-extrabold text-ps-neon-blue text-sm">
-                            {player.goals_count} <span className="text-[9px] font-normal text-gray-500">Гол(ів)</span>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center text-[11px] text-gray-600 py-4">Немає забитих голів.</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Assistants */}
-                <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-pink mb-3">
-                    🎯 Кращі Асистенти
-                  </h3>
-                  
-                  <div className="space-y-2">
-                    {stats?.topAssistants && stats.topAssistants.length > 0 ? (
-                      stats.topAssistants.map((player, idx) => (
-                        <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2 last:border-b-0 text-xs">
-                          <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded bg-ps-dark-item text-[10px] font-bold text-gray-400 flex items-center justify-center">
-                              {idx + 1}
-                            </div>
-                            <div>
-                              <div className="font-bold text-white">{player.player_name}</div>
-                              <div className="text-[9px] text-gray-400">{player.team_name}</div>
-                            </div>
-                          </div>
-                          <div className="font-extrabold text-ps-neon-pink text-sm">
-                            {player.assists_count} <span className="text-[9px] font-normal text-gray-500">Пас(ів)</span>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center text-[11px] text-gray-600 py-4">Немає асистів.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: COINS LEADERBOARD */}
-            {activeStatsTab === 'coins' && (
-              <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-yellow mb-3 flex items-center gap-1.5">
-                  <Coins className="w-4 h-4 text-ps-yellow" /> Лідерборд Багатства (PS-Coins)
-                </h3>
-                
-                <div className="space-y-2.5">
-                  {stats?.coinsLeaderboard && stats.coinsLeaderboard.length > 0 ? (
-                    stats.coinsLeaderboard.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2.5 last:border-b-0 text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`w-6 h-6 rounded-full font-bold flex items-center justify-center text-xs ${
-                            idx === 0 ? 'bg-ps-yellow text-black' : 'bg-ps-dark-item text-gray-400'
-                          }`}>
-                            {idx + 1}
-                          </div>
-                          <span className="font-bold text-white">{item.player_name}</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-1 bg-ps-yellow/10 border border-ps-yellow/30 px-2.5 py-1 rounded-lg">
-                          <span className="font-extrabold text-ps-yellow text-sm">{item.coins_balance}</span>
-                          <span className="text-[9px] text-ps-yellow/85 uppercase font-bold tracking-wider">PSC</span>
-                        </div>
+                          ))
+                        ) : (
+                          <div className="text-center text-[11px] text-gray-600 py-4">Немає забитих голів.</div>
+                        )}
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center text-xs text-gray-600 py-4">Рейтинг пустий.</div>
-                  )}
-                </div>
-              </div>
-            )}
+                    </div>
 
+                    {/* Assistants */}
+                    <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                      <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-pink mb-3">
+                        🎯 Кращі Асистенти
+                      </h3>
+                      
+                      <div className="space-y-2">
+                        {stats?.topAssistants && stats.topAssistants.length > 0 ? (
+                          stats.topAssistants.map((player, idx) => (
+                            <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2 last:border-b-0 text-xs">
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded bg-ps-dark-item text-[10px] font-bold text-gray-400 flex items-center justify-center">
+                                  {idx + 1}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-white">{player.player_name}</div>
+                                  <div className="text-[9px] text-gray-400">{player.team_name}</div>
+                                </div>
+                              </div>
+                              <div className="font-extrabold text-ps-neon-pink text-sm">
+                                {player.assists_count} <span className="text-[9px] font-normal text-gray-500">Пас(ів)</span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center text-[11px] text-gray-600 py-4">Немає асистів.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB: COINS LEADERBOARD */}
+                {activeStatsTab === 'coins' && (
+                  <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-yellow mb-3 flex items-center gap-1.5">
+                      <Coins className="w-4 h-4 text-ps-yellow" /> Лідерборд Багатства (PS-Coins)
+                    </h3>
+                    
+                    <div className="space-y-2.5">
+                      {stats?.coinsLeaderboard && stats.coinsLeaderboard.length > 0 ? (
+                        stats.coinsLeaderboard.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2.5 last:border-b-0 text-xs">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-6 h-6 rounded-full font-bold flex items-center justify-center text-xs ${
+                                idx === 0 ? 'bg-ps-yellow text-black' : 'bg-ps-dark-item text-gray-400'
+                              }`}>
+                                {idx + 1}
+                              </div>
+                              <span className="font-bold text-white">{item.player_name}</span>
+                            </div>
+                            
+                            <div className="flex items-center gap-1 bg-ps-yellow/10 border border-ps-yellow/30 px-2.5 py-1 rounded-lg">
+                              <span className="font-extrabold text-ps-yellow text-sm">{item.coins_balance}</span>
+                              <span className="text-[9px] text-ps-yellow/85 uppercase font-bold tracking-wider">PSC</span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center text-xs text-gray-600 py-4">Рейтинг пустий.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -1083,179 +1206,7 @@ function App() {
         {activeTab === 'admin' && (
           <div className="space-y-6">
             
-            {/* 1. TOURNAMENT CONSTRUCTOR */}
-            <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue flex items-center gap-1">
-                <Users className="w-4 h-4 text-ps-blue" /> Конструктор турніру
-              </h3>
-
-              <div className="space-y-3 text-xs">
-                {/* Title */}
-                <div>
-                  <label className="block text-gray-400 font-semibold mb-1">Назва турніру</label>
-                  <input
-                    type="text"
-                    value={tournamentName}
-                    onChange={(e) => setTournamentName(e.target.value)}
-                    placeholder="Напр. Осінній Кубок 2026"
-                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
-                  />
-                </div>
-
-                {/* Players List with Add/Remove */}
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-gray-400 font-semibold">Гравці турніру ({tourneyPlayers.length})</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTourneyPlayers([...tourneyPlayers, `Гравець ${tourneyPlayers.length + 1}`]);
-                        setSelectedTeamIds([]); // Clear selection since limit changed
-                      }}
-                      className="text-[10px] bg-ps-blue/15 border border-ps-blue/40 text-ps-neon-blue font-bold px-2.5 py-1 rounded-lg hover:bg-ps-blue hover:text-white transition-all"
-                    >
-                      + Додати Гравця
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                    {tourneyPlayers.map((p, idx) => (
-                      <div key={idx} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={p}
-                          onChange={(e) => {
-                            const updated = [...tourneyPlayers];
-                            updated[idx] = e.target.value;
-                            setTourneyPlayers(updated);
-                          }}
-                          placeholder={`Гравець ${idx + 1}`}
-                          className="flex-1 bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors text-center font-semibold"
-                        />
-                        {tourneyPlayers.length > 2 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTourneyPlayers(tourneyPlayers.filter((_, i) => i !== idx));
-                              setSelectedTeamIds([]); // Clear selection since limit changed
-                            }}
-                            className="p-2 bg-ps-neon-pink/10 border border-ps-neon-pink/30 hover:bg-ps-neon-pink hover:text-black text-ps-neon-pink rounded-xl transition-all shrink-0"
-                            title="Видалити гравця"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Pot size & Type */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-gray-400 font-semibold mb-1">К-ть команд на гравця (N)</label>
-                    <select
-                      value={tourneyN}
-                      onChange={(e) => {
-                        setTourneyN(parseInt(e.target.value));
-                        setSelectedTeamIds([]); // Clear selections
-                      }}
-                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
-                    >
-                      <option value="1">1 команда</option>
-                      <option value="2">2 команди</option>
-                      <option value="3">3 команди</option>
-                      <option value="4">4 команди</option>
-                      <option value="5">5 команд</option>
-                      <option value="6">6 команд</option>
-                      <option value="7">7 команд</option>
-                      <option value="8">8 команд</option>
-                      <option value="9">9 команд</option>
-                      <option value="10">10 команд</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-gray-400 font-semibold mb-1">Тип турніру</label>
-                    <select
-                      value={tourneyType}
-                      onChange={(e) => setTourneyType(e.target.value)}
-                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
-                    >
-                      <option value="Groups+Playoff">Групи+Плей-оф</option>
-                      <option value="Playoff">Суто Плей-оф</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Team Selection Tabs */}
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-gray-400 font-semibold">Оберіть команди ({selectedTeamIds.length} / {tourneyPlayers.length * tourneyN})</label>
-                    <span className="text-[10px] text-ps-neon-blue font-bold">
-                      {selectedTeamIds.length === (tourneyPlayers.length * tourneyN) ? 'Достатньо!' : `Потрібно ще ${(tourneyPlayers.length * tourneyN) - selectedTeamIds.length}`}
-                    </span>
-                  </div>
-
-                  {/* League tabs header */}
-                  <div className="flex gap-1 overflow-x-auto pb-2 pr-1 scrollbar-thin">
-                    {Object.keys(teams).map(league => (
-                      <button
-                        key={league}
-                        type="button"
-                        onClick={() => setSelectedLeagueTab(league)}
-                        className={`py-1 px-3 rounded-lg text-[10px] font-bold shrink-0 border uppercase tracking-wider transition-colors ${
-                          selectedLeagueTab === league 
-                            ? 'bg-ps-blue/20 border-ps-neon-blue text-ps-neon-blue shadow-neon-blue'
-                            : 'bg-ps-dark border-ps-dark-item text-gray-400'
-                        }`}
-                      >
-                        {league}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Teams Selection Grid */}
-                  <div className="bg-ps-dark border border-ps-dark-item rounded-xl p-3 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto mt-2">
-                    {teams[selectedLeagueTab]?.map(team => {
-                      const isSelected = selectedTeamIds.includes(team.id);
-                      return (
-                        <button
-                          key={team.id}
-                          type="button"
-                          onClick={() => toggleTeamSelection(team.id)}
-                          className={`p-2.5 rounded-xl border text-left transition-all duration-300 ${
-                            isSelected 
-                              ? 'bg-ps-neon-blue/10 border-ps-neon-blue text-white shadow-neon-blue' 
-                              : 'bg-ps-dark-card border-ps-dark-item text-gray-300 hover:border-gray-600'
-                          }`}
-                        >
-                          <div className="font-bold text-xs truncate">{team.name}</div>
-                          <div className="text-[9px] text-gray-400 mt-0.5">Рейтинг: {team.overall}</div>
-                        </button>
-                      );
-                    })}
-                    {(!teams[selectedLeagueTab] || teams[selectedLeagueTab].length === 0) && (
-                      <div className="col-span-2 text-center text-xs text-gray-600 py-4">
-                        Команд немає. Додайте нижче!
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Generate Button */}
-                <button
-                  type="button"
-                  onClick={handleGenerateTournament}
-                  disabled={loading || selectedTeamIds.length !== 4 * tourneyN}
-                  className="w-full bg-ps-blue hover:bg-ps-blue/90 disabled:opacity-50 text-white font-bold py-3 rounded-xl shadow-neon-blue transition-all flex items-center justify-center gap-1.5"
-                >
-                  <Play className="w-4 h-4 fill-white" /> ЗГЕНЕРУВАТИ ТУРНІР
-                </button>
-              </div>
-            </div>
-
-            {/* 2. SQUAD ROSTER EDITOR */}
+            {/* 1. SQUAD ROSTER EDITOR */}
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-pink flex items-center gap-1">
                 <Edit3 className="w-4 h-4 text-ps-neon-pink" /> Редагування Складів Команд
@@ -1324,7 +1275,7 @@ function App() {
               </div>
             </div>
 
-            {/* 3. CREATE TEAM FORM */}
+            {/* 2. CREATE TEAM FORM */}
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-white flex items-center gap-1">
                 <Plus className="w-4 h-4 text-white" /> Створення нової команди
@@ -1432,7 +1383,7 @@ function App() {
               </form>
             </div>
 
-            {/* 4. CONFLICT RESOLUTION (PLAYOFF TEAM OWNER TRANSFER) */}
+            {/* 3. CONFLICT RESOLUTION (PLAYOFF TEAM OWNER TRANSFER) */}
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-yellow flex items-center gap-1">
                 <AlertTriangle className="w-4 h-4 text-ps-yellow" /> Вирішення конфліктів у плей-оф
@@ -1444,14 +1395,32 @@ function App() {
 
               <form onSubmit={handleTransferPlayoffTeam} className="space-y-3 text-xs">
                 <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Оберіть турнір</label>
+                  <select
+                    value={resolverTournamentId}
+                    onChange={(e) => {
+                      setResolverTournamentId(e.target.value);
+                      setTransferMatchId('');
+                    }}
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
+                  >
+                    <option value="">-- Оберіть турнір --</option>
+                    {tournaments.map(t => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-gray-400 font-semibold mb-1">Оберіть матч плей-оф</label>
                   <select
                     value={transferMatchId}
                     onChange={(e) => setTransferMatchId(e.target.value)}
                     className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
+                    disabled={!resolverTournamentId}
                   >
                     <option value="">-- Оберіть матч --</option>
-                    {matches.filter(m => m.stage.includes('Playoff') && m.status === 'pending').map(m => (
+                    {matches.filter(m => m.tournament_id === parseInt(resolverTournamentId) && m.stage.includes('Playoff') && m.status === 'pending').map(m => (
                       <option key={m.id} value={m.id}>
                         {m.stage}: {m.team1_name} vs {m.team2_name}
                       </option>
@@ -1466,6 +1435,7 @@ function App() {
                       value={transferTeamId}
                       onChange={(e) => setTransferTeamId(e.target.value)}
                       className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
+                      disabled={!transferMatchId}
                     >
                       <option value="">-- Команда --</option>
                       {transferMatchId && (() => {
@@ -1486,6 +1456,7 @@ function App() {
                       value={transferNewPlayerId}
                       onChange={(e) => setTransferNewPlayerId(e.target.value)}
                       className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
+                      disabled={!transferMatchId}
                     >
                       <option value="">-- Учасник --</option>
                       {players.map(p => (
@@ -1497,7 +1468,8 @@ function App() {
 
                 <button
                   type="submit"
-                  className="w-full border border-ps-yellow/40 bg-ps-yellow/10 hover:bg-ps-yellow hover:text-black text-ps-yellow font-bold py-2.5 rounded-xl transition-all"
+                  disabled={!transferMatchId || !transferTeamId || !transferNewPlayerId}
+                  className="w-full border border-ps-yellow/40 bg-ps-yellow/10 hover:bg-ps-yellow hover:text-black disabled:opacity-50 text-ps-yellow font-bold py-2.5 rounded-xl transition-all"
                 >
                   Передати керування
                 </button>
@@ -1506,6 +1478,7 @@ function App() {
 
           </div>
         )}
+
 
         {/* ========================================================================= */}
         {/* TAB 4: BANNER GENERATOR */}
@@ -1757,6 +1730,195 @@ function App() {
                 ЗАПИСАТИ РЕЗУЛЬТАТ ТА НАРАХУВАТИ КОЇНИ
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* TOURNAMENT CONSTRUCTOR MODAL */}
+      {showCreateTournamentModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end justify-center p-4">
+          <div className="bg-ps-dark-card border border-ps-dark-item rounded-t-3xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up">
+            
+            <div className="flex items-center justify-between border-b border-ps-dark-item pb-3">
+              <div>
+                <h3 className="font-extrabold text-sm text-white">Новий турнір</h3>
+                <span className="text-[10px] text-ps-neon-blue uppercase tracking-widest font-bold">Параметри змагання</span>
+              </div>
+              <button 
+                onClick={() => setShowCreateTournamentModal(false)}
+                className="text-gray-400 hover:text-white text-xs font-bold uppercase tracking-wider py-1 px-3 bg-ps-dark-item rounded-xl"
+              >
+                Закрити
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Title */}
+              <div>
+                <label className="block text-gray-400 font-semibold mb-1">Назва турніру</label>
+                <input
+                  type="text"
+                  value={tournamentName}
+                  onChange={(e) => setTournamentName(e.target.value)}
+                  placeholder="Напр. Осінній Кубок 2026"
+                  className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                />
+              </div>
+
+              {/* Players List with Add/Remove */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-gray-400 font-semibold">Гравці турніру ({tourneyPlayers.length})</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTourneyPlayers([...tourneyPlayers, `Гравець ${tourneyPlayers.length + 1}`]);
+                      setSelectedTeamIds([]); // Clear selection since limit changed
+                    }}
+                    className="text-[10px] bg-ps-blue/15 border border-ps-blue/40 text-ps-neon-blue font-bold px-2.5 py-1 rounded-lg hover:bg-ps-blue hover:text-white transition-all"
+                  >
+                    + Додати Гравця
+                  </button>
+                </div>
+                
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {tourneyPlayers.map((p, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={p}
+                        onChange={(e) => {
+                          const updated = [...tourneyPlayers];
+                          updated[idx] = e.target.value;
+                          setTourneyPlayers(updated);
+                        }}
+                        placeholder={`Гравець ${idx + 1}`}
+                        className="flex-1 bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors text-center font-semibold"
+                      />
+                      {tourneyPlayers.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTourneyPlayers(tourneyPlayers.filter((_, i) => i !== idx));
+                            setSelectedTeamIds([]); // Clear selection since limit changed
+                          }}
+                          className="p-2 bg-ps-neon-pink/10 border border-ps-neon-pink/30 hover:bg-ps-neon-pink hover:text-black text-ps-neon-pink rounded-xl transition-all shrink-0"
+                          title="Видалити гравця"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pot size & Type */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">К-ть команд на гравця (N)</label>
+                  <select
+                    value={tourneyN}
+                    onChange={(e) => {
+                      setTourneyN(parseInt(e.target.value));
+                      setSelectedTeamIds([]); // Clear selections
+                    }}
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                  >
+                    <option value="1">1 команда</option>
+                    <option value="2">2 команди</option>
+                    <option value="3">3 команди</option>
+                    <option value="4">4 команди</option>
+                    <option value="5">5 команд</option>
+                    <option value="6">6 команд</option>
+                    <option value="7">7 команд</option>
+                    <option value="8">8 команд</option>
+                    <option value="9">9 команд</option>
+                    <option value="10">10 команд</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Тип турніру</label>
+                  <select
+                    value={tourneyType}
+                    onChange={(e) => setTourneyType(e.target.value)}
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
+                  >
+                    <option value="Groups+Playoff">Групи+Плей-оф</option>
+                    <option value="Playoff">Суто Плей-оф</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Team Selection Tabs */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-gray-400 font-semibold">Оберіть команди ({selectedTeamIds.length} / {tourneyPlayers.length * tourneyN})</label>
+                  <span className="text-[10px] text-ps-neon-blue font-bold">
+                    {selectedTeamIds.length === (tourneyPlayers.length * tourneyN) ? 'Достатньо!' : `Потрібно ще ${(tourneyPlayers.length * tourneyN) - selectedTeamIds.length}`}
+                  </span>
+                </div>
+
+                {/* League tabs header */}
+                <div className="flex gap-1 overflow-x-auto pb-2 pr-1 scrollbar-thin">
+                  {Object.keys(teams).map(league => (
+                    <button
+                      key={league}
+                      type="button"
+                      onClick={() => setSelectedLeagueTab(league)}
+                      className={`py-1 px-3 rounded-lg text-[10px] font-bold shrink-0 border uppercase tracking-wider transition-colors ${
+                        selectedLeagueTab === league 
+                          ? 'bg-ps-blue/20 border-ps-neon-blue text-ps-neon-blue shadow-neon-blue'
+                          : 'bg-ps-dark border-ps-dark-item text-gray-400'
+                      }`}
+                    >
+                      {league}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Teams Selection Grid */}
+                <div className="bg-ps-dark border border-ps-dark-item rounded-xl p-3 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto mt-2">
+                  {teams[selectedLeagueTab]?.map(team => {
+                    const isSelected = selectedTeamIds.includes(team.id);
+                    return (
+                      <button
+                        key={team.id}
+                        type="button"
+                        onClick={() => toggleTeamSelection(team.id)}
+                        className={`p-2.5 rounded-xl border text-left transition-all duration-300 ${
+                          isSelected 
+                            ? 'bg-ps-neon-blue/10 border-ps-neon-blue text-white shadow-neon-blue' 
+                            : 'bg-ps-dark-card border-ps-dark-item text-gray-300 hover:border-gray-600'
+                        }`}
+                      >
+                        <div className="font-bold text-xs truncate">{team.name}</div>
+                        <div className="text-[9px] text-gray-400 mt-0.5">Рейтинг: {team.overall}</div>
+                      </button>
+                    );
+                  })}
+                  {(!teams[selectedLeagueTab] || teams[selectedLeagueTab].length === 0) && (
+                    <div className="col-span-2 text-center text-xs text-gray-600 py-4">
+                      Команд немає.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Generate Button */}
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleGenerateTournament();
+                  setShowCreateTournamentModal(false);
+                }}
+                disabled={loading || selectedTeamIds.length !== tourneyPlayers.length * tourneyN}
+                className="w-full bg-ps-blue hover:bg-ps-blue/90 disabled:opacity-50 text-white font-bold py-3 rounded-xl shadow-neon-blue transition-all flex items-center justify-center gap-1.5 mt-2"
+              >
+                <Play className="w-4 h-4 fill-white" /> СТВОРИТИ ТУРНІР
+              </button>
+            </div>
           </div>
         </div>
       )}
