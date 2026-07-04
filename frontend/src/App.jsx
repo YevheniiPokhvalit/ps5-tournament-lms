@@ -1874,25 +1874,29 @@ function App() {
             </div>
 
             {/* 3. CONFLICT RESOLUTION (PLAYOFF TEAM OWNER TRANSFER) */}
+            {/* 3. CONFLICT RESOLUTION (PLAYOFF TEAM OWNER TRANSFER) */}
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-yellow flex items-center gap-1">
                 <AlertTriangle className="w-4 h-4 text-ps-yellow" /> Вирішення конфліктів у плей-оф
               </h3>
               
               <p className="text-[10px] text-gray-400 leading-relaxed">
-                Якщо дві команди одного гравця зійшлися в сітці плей-оф, ви можете тимчасово передати керування однією з них учаснику, який вибув з турніру.
+                Оберіть турнір, а потім конкретний матч, щоб передати керування однією з команд учаснику, який зараз вільний (вибув з турніру).
               </p>
 
-              <form onSubmit={handleTransferPlayoffTeam} className="space-y-3 text-xs">
+              <div className="space-y-4 text-xs">
+                {/* Вибір турніру */}
                 <div>
                   <label className="block text-gray-400 font-semibold mb-1">Оберіть турнір</label>
                   <select
-                    value={resolverTournamentId}
+                    value={resolverTournamentId || ''}
                     onChange={(e) => {
                       setResolverTournamentId(e.target.value);
                       setTransferMatchId('');
+                      setTransferTeamId('');
+                      setTransferNewPlayerId('');
                     }}
-                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
+                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors font-bold"
                   >
                     <option value="">-- Оберіть турнір --</option>
                     {tournaments.map(t => (
@@ -1901,74 +1905,123 @@ function App() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-gray-400 font-semibold mb-1">Оберіть матч плей-оф</label>
-                  <select
-                    value={transferMatchId}
-                    onChange={(e) => setTransferMatchId(e.target.value)}
-                    className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
-                    disabled={!resolverTournamentId}
-                  >
-                    <option value="">-- Оберіть матч --</option>
-                    {matches.filter(m => m.tournament_id === parseInt(resolverTournamentId) && m.stage.includes('Playoff') && m.status === 'pending').map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.stage}: {m.team1_name} vs {m.team2_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Список матчів турніру у вигляді інтерактивних карток */}
+                {resolverTournamentId && (
+                  <div className="space-y-2">
+                    <label className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Матчі стадії плей-оф</label>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {matches
+                        .filter(m => m.tournament_id === parseInt(resolverTournamentId) && m.status === 'pending' && !m.stage.includes('Група'))
+                        .map(m => {
+                          // Конфлікт виникає, якщо один і той самий гравець записаний за обидві команди в матчі
+                          const isConflict = m.player1_name === m.player2_name;
+                          const isSelected = parseInt(transferMatchId) === m.id;
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-gray-400 font-semibold mb-1">Команда, яку передають</label>
-                    <select
-                      value={transferTeamId}
-                      onChange={(e) => setTransferTeamId(e.target.value)}
-                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
-                      disabled={!transferMatchId}
-                    >
-                      <option value="">-- Команда --</option>
-                      {transferMatchId && (() => {
-                        const m = matches.find(x => x.id === parseInt(transferMatchId));
-                        return m ? (
-                          <>
-                            <option value={m.team1_id}>{m.team1_name} ({m.player1_name})</option>
-                            <option value={m.team2_id}>{m.team2_name} ({m.player2_name})</option>
-                          </>
-                        ) : null;
-                      })()}
-                    </select>
+                          return (
+                            <div 
+                              key={m.id}
+                              onClick={() => {
+                                setTransferMatchId(m.id.toString());
+                                setTransferTeamId('');
+                                setTransferNewPlayerId('');
+                              }}
+                              className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                                isSelected 
+                                  ? 'bg-ps-yellow/10 border-ps-yellow shadow-neon-yellow' 
+                                  : isConflict 
+                                    ? 'bg-ps-neon-pink/5 border-ps-neon-pink/40 hover:border-ps-neon-pink animate-pulse' 
+                                    : 'bg-ps-dark border-ps-dark-item hover:border-gray-600'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-[9px] font-extrabold bg-ps-dark-item px-2 py-0.5 rounded text-gray-400 uppercase tracking-wider">
+                                  {m.stage}
+                                </span>
+                                {isConflict && (
+                                  <span className="text-[8px] font-extrabold text-ps-neon-pink bg-ps-neon-pink/10 px-1.5 py-0.5 rounded uppercase">
+                                    ⚠️ Конфлікт самоігри
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex justify-between items-center text-white font-bold text-xs">
+                                <span className="truncate">{m.team1_name} ({m.player1_name})</span>
+                                <span className="text-gray-500 px-1 text-[10px]">vs</span>
+                                <span className="truncate text-right">{m.team2_name} ({m.player2_name})</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                      {matches.filter(m => m.tournament_id === parseInt(resolverTournamentId) && m.status === 'pending' && !m.stage.includes('Група')).length === 0 && (
+                        <div className="text-center text-[10px] text-gray-500 py-6 bg-ps-dark border border-ps-dark-item border-dashed rounded-xl">
+                          Немає активних матчів плей-оф для цього турніру.
+                        </div>
+                      )}
+                    </div>
                   </div>
+                )}
 
-                  <div>
-                    <label className="block text-gray-400 font-semibold mb-1">Новий керуючий гравець</label>
-                    <select
-                      value={transferNewPlayerId}
-                      onChange={(e) => setTransferNewPlayerId(e.target.value)}
-                      className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-yellow transition-colors"
-                      disabled={!transferMatchId}
+                {/* Блок налаштування передачі (з'являється, тільки коли матч обрано) */}
+                {transferMatchId && (
+                  <div className="bg-ps-dark p-3 rounded-xl border border-ps-dark-item space-y-3 animate-slide-up">
+                    <div className="text-[10px] uppercase font-bold text-ps-yellow tracking-wider">Налаштування передачі контролю</div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-gray-400 text-[10px] mb-1">Яку команду віддати?</label>
+                        <select
+                          value={transferTeamId}
+                          onChange={(e) => setTransferTeamId(e.target.value)}
+                          className="w-full bg-ps-dark-card border border-ps-dark-item rounded-lg py-2 px-2 text-white font-semibold focus:outline-none focus:border-ps-yellow"
+                        >
+                          <option value="">-- Оберіть --</option>
+                          {(() => {
+                            const m = matches.find(x => x.id === parseInt(transferMatchId));
+                            return m ? (
+                              <>
+                                <option value={m.team1_id}>{m.team1_name} ({m.player1_name})</option>
+                                <option value={m.team2_id}>{m.team2_name} ({m.player2_name})</option>
+                              </>
+                            ) : null;
+                          })()}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-400 text-[10px] mb-1">Кому передати?</label>
+                        <select
+                          value={transferNewPlayerId}
+                          onChange={(e) => setTransferNewPlayerId(e.target.value)}
+                          className="w-full bg-ps-dark-card border border-ps-dark-item rounded-lg py-2 px-2 text-white font-semibold focus:outline-none focus:border-ps-yellow"
+                        >
+                          <option value="">-- Вільний гравець --</option>
+                          {players
+                            .filter(p => {
+                              // За бажанням тут можна відфільтрувати суто вільних гравців, але поки виведемо всіх для гнучкості адміна
+                              const m = matches.find(x => x.id === parseInt(transferMatchId));
+                              if (!m) return true;
+                              // Ховаємо того, хто і так грає в цьому матчі, щоб не передати йому ж його ж команду
+                              return p.name !== m.player1_name;
+                            })
+                            .map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTransferPlayoffTeam}
+                      disabled={loading || !transferTeamId || !transferNewPlayerId}
+                      className="w-full bg-ps-yellow/20 hover:bg-ps-yellow border border-ps-yellow/45 text-ps-yellow hover:text-black disabled:opacity-30 font-bold py-2.5 rounded-xl transition-all shadow-neon-yellow"
                     >
-                      <option value="">-- Учасник --</option>
-                      {players.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
+                      ПІДТВЕРДИТИ ПЕРЕДАЧУ КОМАНДИ
+                    </button>
                   </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={!transferMatchId || !transferTeamId || !transferNewPlayerId}
-                  className="w-full border border-ps-yellow/40 bg-ps-yellow/10 hover:bg-ps-yellow hover:text-black disabled:opacity-50 text-ps-yellow font-bold py-2.5 rounded-xl transition-all"
-                >
-                  Передати керування
-                </button>
-              </form>
+                )}
+              </div>
             </div>
-
-          </div>
-        )}
-
 
         {/* ========================================================================= */}
         {/* TAB 4: BANNER GENERATOR */}
