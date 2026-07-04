@@ -1289,7 +1289,7 @@ function App() {
                                   <th className="py-1.5 font-bold text-center w-8">РМ</th>
                                   <th className="py-1.5 font-bold text-center w-8">О</th>
                                 </tr>
-                              </table>
+                              </thead>
                               <tbody>
                                 {stats.groupStandings[groupName].map((team, idx) => {
                                   const isMyTeam = team.player_name === selectedPlayerName;
