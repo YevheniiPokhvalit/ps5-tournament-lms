@@ -455,8 +455,7 @@ app.post('/api/tournaments', async (req, res) => {
         }
       }
     } else {
-      // Playoff structure: Pairs outer elements (strongest vs weakest) but avoids player conflicts
-      // Sort teamsWithOwners matching the overall ranking
+      // Sort teamsWithOwners matching the overall ranking (descending)
       const teamsWithOwners = teams.map(t => {
         const assign = assignments.find(a => a.teamId === t.id);
         return {
@@ -465,58 +464,116 @@ app.post('/api/tournaments', async (req, res) => {
           overall: t.overall,
           owner_id: assign.playerId
         };
-      });
+      }).sort((a, b) => b.overall - a.overall);
 
-      const paired = new Set();
-      const playoffMatches = [];
-      const totalTeams = teamsWithOwners.length;
+      const X = teamsWithOwners.length;
+      const isPowerOfTwo = (X & (X - 1)) === 0;
 
-      for (let i = 0; i < totalTeams; i++) {
-        if (paired.has(i)) continue;
+      function getStageName(teamsCount) {
+        if (teamsCount === 2) return 'Фінал';
+        if (teamsCount === 4) return '1/2 фіналу';
+        if (teamsCount === 8) return '1/4 фіналу';
+        if (teamsCount === 16) return '1/8 фіналу';
+        if (teamsCount === 32) return '1/16 фіналу';
+        return `Раунд ${teamsCount}`;
+      }
 
-        let opponentIndex = -1;
-        // Search from the end for the weakest team not owned by same player
-        for (let j = totalTeams - 1; j > i; j--) {
-          if (paired.has(j)) continue;
-          if (teamsWithOwners[i].owner_id !== teamsWithOwners[j].owner_id) {
-            opponentIndex = j;
-            break;
-          }
-        }
+      let playoffMatches = [];
 
-        // Fallback: any unpaired team if conflict couldn't be resolved (avoiding crash)
-        if (opponentIndex === -1) {
-          for (let j = i + 1; j < totalTeams; j++) {
-            if (!paired.has(j)) {
+      if (isPowerOfTwo) {
+        const paired = new Set();
+        for (let i = 0; i < X; i++) {
+          if (paired.has(i)) continue;
+
+          let opponentIndex = -1;
+          for (let j = X - 1; j > i; j--) {
+            if (paired.has(j)) continue;
+            if (teamsWithOwners[i].owner_id !== teamsWithOwners[j].owner_id) {
               opponentIndex = j;
               break;
             }
           }
+
+          if (opponentIndex === -1) {
+            for (let j = i + 1; j < X; j++) {
+              if (!paired.has(j)) {
+                opponentIndex = j;
+                break;
+              }
+            }
+          }
+
+          if (opponentIndex !== -1) {
+            paired.add(i);
+            paired.add(opponentIndex);
+            playoffMatches.push({
+              team1: teamsWithOwners[i],
+              team2: teamsWithOwners[opponentIndex],
+              stage: getStageName(X)
+            });
+          }
+        }
+      } else {
+        // Find largest power of 2 smaller than X
+        let P = 2;
+        while (P * 2 < X) {
+          P *= 2;
         }
 
-        if (opponentIndex !== -1) {
-          paired.add(i);
-          paired.add(opponentIndex);
-          playoffMatches.push({
-            team1: teamsWithOwners[i],
-            team2: teamsWithOwners[opponentIndex]
-          });
+        const M = X - P; // Number of Preliminary Matches
+        const numPlaying = 2 * M;
+        const numByes = X - numPlaying; // Top teams receiving byes
+
+        const preliminaryTeams = teamsWithOwners.slice(numByes);
+
+        const paired = new Set();
+        const len = preliminaryTeams.length;
+        for (let i = 0; i < len; i++) {
+          if (paired.has(i)) continue;
+
+          let opponentIndex = -1;
+          for (let j = len - 1; j > i; j--) {
+            if (paired.has(j)) continue;
+            if (preliminaryTeams[i].owner_id !== preliminaryTeams[j].owner_id) {
+              opponentIndex = j;
+              break;
+            }
+          }
+
+          if (opponentIndex === -1) {
+            for (let j = i + 1; j < len; j++) {
+              if (!paired.has(j)) {
+                opponentIndex = j;
+                break;
+              }
+            }
+          }
+
+          if (opponentIndex !== -1) {
+            paired.add(i);
+            paired.add(opponentIndex);
+            playoffMatches.push({
+              team1: preliminaryTeams[i],
+              team2: preliminaryTeams[opponentIndex],
+              stage: 'Попередній раунд'
+            });
+          }
         }
       }
 
       // Save Playoff matches
-      for (const pair of playoffMatches) {
+      for (const match of playoffMatches) {
         const insertMatchRes = await client.query(`
           INSERT INTO matches (tournament_id, stage, team1_id, team2_id, current_player1_id, current_player2_id, status)
           VALUES ($1, $2, $3, $4, $5, $6, 'pending')
           RETURNING *;
         `, [
           tournamentId,
-          `Playoff - Round of ${totalTeams}`,
-          pair.team1.id,
-          pair.team2.id,
-          pair.team1.owner_id,
-          pair.team2.owner_id
+          match.stage,
+          match.team1.id,
+          match.team2.id,
+          match.team1.owner_id,
+          match.team2.owner_id
         ]);
         matchesScheduled.push(insertMatchRes.rows[0]);
       }
@@ -688,6 +745,90 @@ app.put('/api/matches/:id', async (req, res) => {
     // Update balances
     await client.query('UPDATE players_balance SET coins_balance = coins_balance + $1 WHERE player_name = $2;', [p1Reward, player1Name]);
     await client.query('UPDATE players_balance SET coins_balance = coins_balance + $1 WHERE player_name = $2;', [p2Reward, player2Name]);
+
+    // 6b. Auto-advance playoff winners
+    if (match.status !== 'completed' && match.stage && !match.stage.startsWith('Group')) {
+      const unfinishedRes = await client.query(
+        'SELECT COUNT(*) FROM matches WHERE tournament_id = $1 AND stage = $2 AND status != \'completed\';',
+        [match.tournament_id, match.stage]
+      );
+      const unfinishedCount = parseInt(unfinishedRes.rows[0].count);
+
+      if (unfinishedCount === 0) {
+        // Current stage finished! Get all active (uneliminated) teams in this tournament
+        const activeTeamsRes = await client.query(`
+          SELECT tt.team_id, t.name as team_name, t.overall, tt.original_player_id as owner_id
+          FROM tournament_teams tt
+          JOIN teams t ON tt.team_id = t.id
+          WHERE tt.tournament_id = $1
+            AND tt.team_id NOT IN (
+              SELECT CASE WHEN score1 > score2 THEN team2_id ELSE team1_id END
+              FROM matches
+              WHERE tournament_id = $1 AND status = 'completed' AND stage NOT LIKE 'Group%'
+            );
+        `, [match.tournament_id]);
+
+        const activeTeams = activeTeamsRes.rows.sort((a, b) => b.overall - a.overall);
+        const Y = activeTeams.length;
+
+        if (Y > 1) {
+          let nextStageName = `Раунд ${Y}`;
+          if (Y === 2) nextStageName = 'Фінал';
+          else if (Y === 4) nextStageName = '1/2 фіналу';
+          else if (Y === 8) nextStageName = '1/4 фіналу';
+          else if (Y === 16) nextStageName = '1/8 фіналу';
+          else if (Y === 32) nextStageName = '1/16 фіналу';
+
+          const paired = new Set();
+          const playoffMatches = [];
+          for (let i = 0; i < Y; i++) {
+            if (paired.has(i)) continue;
+
+            let opponentIndex = -1;
+            for (let j = Y - 1; j > i; j--) {
+              if (paired.has(j)) continue;
+              if (activeTeams[i].owner_id !== activeTeams[j].owner_id) {
+                opponentIndex = j;
+                break;
+              }
+            }
+
+            if (opponentIndex === -1) {
+              for (let j = i + 1; j < Y; j++) {
+                if (!paired.has(j)) {
+                  opponentIndex = j;
+                  break;
+                }
+              }
+            }
+
+            if (opponentIndex !== -1) {
+              paired.add(i);
+              paired.add(opponentIndex);
+              playoffMatches.push({
+                team1: activeTeams[i],
+                team2: activeTeams[opponentIndex]
+              });
+            }
+          }
+
+          // Save matches for next stage
+          for (const pair of playoffMatches) {
+            await client.query(`
+              INSERT INTO matches (tournament_id, stage, team1_id, team2_id, current_player1_id, current_player2_id, status)
+              VALUES ($1, $2, $3, $4, $5, $6, 'pending');
+            `, [
+              match.tournament_id,
+              nextStageName,
+              pair.team1.team_id,
+              pair.team2.team_id,
+              pair.team1.owner_id,
+              pair.team2.owner_id
+            ]);
+          }
+        }
+      }
+    }
 
     await client.query('COMMIT');
 

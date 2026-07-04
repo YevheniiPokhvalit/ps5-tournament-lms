@@ -145,6 +145,7 @@ function App() {
   const [teamPlayersList, setTeamPlayersList] = useState([]);
   const [newPlayerRosterName, setNewPlayerRosterName] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [activePlayoffStageTab, setActivePlayoffStageTab] = useState('');
 
   // 3. Tournament constructor
   const [tournamentName, setTournamentName] = useState('');
@@ -1418,42 +1419,79 @@ function App() {
                           </div>
                         </div>
                       ))
-                    ) : stats?.playoffMatches && stats.playoffMatches.length > 0 ? (
-                      <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
-                        <h3 className="text-xs font-extrabold uppercase tracking-widest text-ps-neon-pink mb-3">
-                          Сітка Плей-оф (Playoffs)
-                        </h3>
-                        <div className="space-y-3">
-                          {stats.playoffMatches.map(m => (
-                            <div key={m.id} className="bg-ps-dark-item border border-ps-dark-item rounded-xl p-3 text-xs">
-                              <div className="text-[9px] font-bold text-ps-neon-pink uppercase mb-2">{m.stage}</div>
-                              
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="font-bold text-white flex items-center gap-1.5 truncate max-w-[140px]">
-                                  {renderTeamFlag(m.team1_flag_code)}
-                                  <span className="truncate">{m.team1_name}</span>
-                                  <span className="text-[9px] text-gray-400 font-normal shrink-0">({m.player1_name})</span>
-                                </span>
-                                <span className="font-extrabold text-sm text-ps-neon-blue">
-                                  {m.status === 'completed' ? m.score1 : '-'}
-                                </span>
-                              </div>
-                              
-                              <div className="flex justify-between items-center">
-                                <span className="font-bold text-white flex items-center gap-1.5 truncate max-w-[140px]">
-                                  {renderTeamFlag(m.team2_flag_code)}
-                                  <span className="truncate">{m.team2_name}</span>
-                                  <span className="text-[9px] text-gray-400 font-normal shrink-0">({m.player2_name})</span>
-                                </span>
-                                <span className="font-extrabold text-sm text-ps-neon-blue">
-                                  {m.status === 'completed' ? m.score2 : '-'}
-                                </span>
-                              </div>
+                    ) : stats?.playoffMatches && stats.playoffMatches.length > 0 ? (() => {
+                      const stageMap = {};
+                      stats.playoffMatches.forEach(m => {
+                        if (!stageMap[m.stage]) stageMap[m.stage] = [];
+                        stageMap[m.stage].push(m);
+                      });
+                      const stages = Object.keys(stageMap);
+                      if (stages.length > 0 && (!activePlayoffStageTab || !stages.includes(activePlayoffStageTab))) {
+                        // Avoid infinite loops inside render: set state asynchronously or immediately
+                        // By returning a closure and setting it on the next tick, or just using local selection if not set yet
+                        // Let's use local select fallback so we don't cause React setstate loops!
+                      }
+                      
+                      const selectedStage = (stages.includes(activePlayoffStageTab)) ? activePlayoffStageTab : stages[0];
+
+                      return (
+                        <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-xs font-extrabold uppercase tracking-widest text-ps-neon-pink">
+                              Сітка Плей-оф (Playoffs)
+                            </h3>
+                          </div>
+
+                          {/* Stage horizontal tabs */}
+                          {stages.length > 1 && (
+                            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-ps-dark-item/50">
+                              {stages.map(stg => (
+                                <button
+                                  key={stg}
+                                  type="button"
+                                  onClick={() => setActivePlayoffStageTab(stg)}
+                                  className={`py-1.5 px-3 rounded-lg text-[9px] font-extrabold uppercase tracking-wider shrink-0 border transition-all duration-300 ${
+                                    selectedStage === stg
+                                      ? 'bg-ps-neon-pink/15 border-ps-neon-pink text-ps-neon-pink shadow-neon-pink'
+                                      : 'bg-ps-dark border-ps-dark-item text-gray-500 hover:text-white'
+                                  }`}
+                                >
+                                  {stg}
+                                </button>
+                              ))}
                             </div>
-                          ))}
+                          )}
+
+                          <div className="space-y-2">
+                            {(stageMap[selectedStage] || []).map(m => (
+                              <div key={m.id} className="bg-ps-dark-item border border-ps-dark-item rounded-xl p-3 text-xs">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="font-bold text-white flex items-center gap-1.5 truncate max-w-[140px]">
+                                    {renderTeamFlag(m.team1_flag_code)}
+                                    <span className="truncate">{m.team1_name}</span>
+                                    <span className="text-[9px] text-gray-400 font-normal shrink-0">({m.player1_name})</span>
+                                  </span>
+                                  <span className="font-extrabold text-sm text-ps-neon-blue">
+                                    {m.status === 'completed' ? m.score1 : '-'}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex justify-between items-center">
+                                  <span className="font-bold text-white flex items-center gap-1.5 truncate max-w-[140px]">
+                                    {renderTeamFlag(m.team2_flag_code)}
+                                    <span className="truncate">{m.team2_name}</span>
+                                    <span className="text-[9px] text-gray-400 font-normal shrink-0">({m.player2_name})</span>
+                                  </span>
+                                  <span className="font-extrabold text-sm text-ps-neon-blue">
+                                    {m.status === 'completed' ? m.score2 : '-'}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ) : (
+                      );
+                    })() : (
                       <div className="text-center text-xs text-gray-500 py-8 bg-ps-dark-card rounded-2xl border border-ps-dark-item">
                         Дані статистики недоступні.
                       </div>
