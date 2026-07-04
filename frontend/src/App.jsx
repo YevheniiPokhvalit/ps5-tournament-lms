@@ -130,6 +130,7 @@ function App() {
   const [selectedTeamForPlayers, setSelectedTeamForPlayers] = useState('');
   const [teamPlayersList, setTeamPlayersList] = useState([]);
   const [newPlayerRosterName, setNewPlayerRosterName] = useState('');
+  const [newPlayerName, setNewPlayerName] = useState('');
 
   // 3. Tournament constructor
   const [tournamentName, setTournamentName] = useState('');
@@ -437,6 +438,52 @@ function App() {
       setAdminPasswordInput('');
     } else {
       triggerError('Неправильний пароль адміна!');
+    }
+  };
+
+  // 6d. Register human player
+  const handleRegisterPlayer = async (e) => {
+    e.preventDefault();
+    if (!newPlayerName.trim()) return triggerError('Введіть ім\'я гравця');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/players`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newPlayerName.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      triggerSuccess(`Гравця "${data.name}" успішно створено!`);
+      setNewPlayerName('');
+      fetchData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 6e. Delete human player
+  const handleDeletePlayer = async (playerId, playerName) => {
+    if (!window.confirm(`Ви дійсно хочете видалити гравця "${playerName}"? Всі його баланси коїнів, закріплені команди та матчі буде видалено назавжди!`)) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/players/${playerId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      triggerSuccess(`Гравця "${playerName}" успішно видалено!`);
+      if (selectedPlayerName === playerName) {
+        setSelectedPlayerName('');
+        localStorage.removeItem('selectedPlayerName');
+      }
+      fetchData();
+    } catch (err) {
+      triggerError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1354,7 +1401,9 @@ function App() {
                                 </div>
                                 <div>
                                   <div className="font-bold text-white">{player.player_name}</div>
-                                  <div className="text-[9px] text-gray-400">{player.team_name}</div>
+                                  <div className="text-[9px] text-gray-400">
+                                    {player.team_name} {player.owner_player_name && <span className="text-ps-neon-blue font-bold">({player.owner_player_name})</span>}
+                                  </div>
                                 </div>
                               </div>
                               <div className="font-extrabold text-ps-neon-blue text-sm">
@@ -1384,7 +1433,9 @@ function App() {
                                 </div>
                                 <div>
                                   <div className="font-bold text-white">{player.player_name}</div>
-                                  <div className="text-[9px] text-gray-400">{player.team_name}</div>
+                                  <div className="text-[9px] text-gray-400">
+                                    {player.team_name} {player.owner_player_name && <span className="text-ps-neon-pink font-bold">({player.owner_player_name})</span>}
+                                  </div>
                                 </div>
                               </div>
                               <div className="font-extrabold text-ps-neon-pink text-sm">
@@ -1630,6 +1681,64 @@ function App() {
                   Зберегти Команду
                 </button>
               </form>
+            </div>
+
+            {/* 2b. MANAGE HUMAN PLAYERS */}
+            <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-ps-neon-blue" /> Керування Гравцями (Франшизами)
+              </h3>
+
+              {/* Add human player */}
+              <form onSubmit={handleRegisterPlayer} className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-gray-400 font-semibold mb-1">Новий гравець (ім'я)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newPlayerName}
+                      onChange={(e) => setNewPlayerName(e.target.value)}
+                      placeholder="Напр. Yaroslav"
+                      className="flex-1 bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors font-bold"
+                    />
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="bg-ps-blue hover:bg-ps-blue/90 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-xl shadow-neon-blue transition-all shrink-0"
+                    >
+                      Додати
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              {/* List players with delete button */}
+              <div className="space-y-2 pt-2 border-t border-ps-dark-item/50">
+                <label className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">Список учасників</label>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {players.map(p => (
+                    <div key={p.id} className="bg-ps-dark border border-ps-dark-item rounded-xl p-2.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-white">{p.name}</span>
+                        <span className="text-[9px] text-ps-yellow bg-ps-yellow/10 border border-ps-yellow/20 px-1.5 py-0.5 rounded font-bold">{p.coins_balance} PSC</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePlayer(p.id, p.name)}
+                        className="p-1.5 rounded-lg bg-ps-neon-pink/10 border border-ps-neon-pink/20 hover:bg-ps-neon-pink hover:text-black text-ps-neon-pink transition-all"
+                        title="Видалити гравця"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {players.length === 0 && (
+                    <div className="text-center text-xs text-gray-600 py-2">
+                      Гравців немає.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* 3. CONFLICT RESOLUTION (PLAYOFF TEAM OWNER TRANSFER) */}

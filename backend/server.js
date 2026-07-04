@@ -858,13 +858,16 @@ app.get('/api/stats', async (req, res) => {
         tp.id as player_id, 
         tp.name as player_name, 
         t.name as team_name, 
+        p.name as owner_player_name,
         COUNT(g.id) as goals_count
       FROM goals g
       JOIN team_players tp ON g.scorer_id = tp.id
       JOIN teams t ON g.team_id = t.id
       JOIN matches m ON g.match_id = m.id
+      LEFT JOIN tournament_teams tt ON tt.tournament_id = m.tournament_id AND tt.team_id = t.id
+      LEFT JOIN players p ON tt.original_player_id = p.id
       WHERE m.tournament_id = $1
-      GROUP BY tp.id, tp.name, t.name
+      GROUP BY tp.id, tp.name, t.name, p.name
       ORDER BY goals_count DESC, tp.name ASC
       LIMIT 10;
     `, [tournament_id]);
@@ -875,13 +878,16 @@ app.get('/api/stats', async (req, res) => {
         tp.id as player_id, 
         tp.name as player_name, 
         t.name as team_name, 
+        p.name as owner_player_name,
         COUNT(g.id) as assists_count
       FROM goals g
       JOIN team_players tp ON g.assistant_id = tp.id
       JOIN teams t ON g.team_id = t.id
       JOIN matches m ON g.match_id = m.id
+      LEFT JOIN tournament_teams tt ON tt.tournament_id = m.tournament_id AND tt.team_id = t.id
+      LEFT JOIN players p ON tt.original_player_id = p.id
       WHERE m.tournament_id = $1
-      GROUP BY tp.id, tp.name, t.name
+      GROUP BY tp.id, tp.name, t.name, p.name
       ORDER BY assists_count DESC, tp.name ASC
       LIMIT 10;
     `, [tournament_id]);
@@ -958,6 +964,24 @@ app.post('/api/players', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+
+// DELETE /api/players/:id - Delete a human player and cascade delete all their matches & assignments
+app.delete('/api/players/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const deleteRes = await pool.query('DELETE FROM players WHERE id = $1 RETURNING id, name;', [id]);
+    if (deleteRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+    res.json({ message: 'Player deleted successfully', playerId: id, playerName: deleteRes.rows[0].name });
+  } catch (error) {
+    console.error('Error deleting player:', error);
+    res.status(500).json({ error: error.message || 'Internal Server Error' });
+  }
+});
+
 
 // GET /api/matches - Fetch list of all matches
 app.get('/api/matches', async (req, res) => {
