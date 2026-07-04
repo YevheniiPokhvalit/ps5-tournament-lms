@@ -36,6 +36,53 @@ function App() {
   const [showCreateTournamentModal, setShowCreateTournamentModal] = useState(false);
   const [resolverTournamentId, setResolverTournamentId] = useState('');
   
+  // Routing & Role states
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(localStorage.getItem('isAdminAuthenticated') === 'true');
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [selectedPlayerName, setSelectedPlayerName] = useState(localStorage.getItem('selectedPlayerName') || '');
+
+  const navigateTo = (path) => {
+    window.history.pushState({}, '', path);
+    setCurrentPath(path);
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    localStorage.removeItem('isAdminAuthenticated');
+    triggerSuccess('Ви вийшли з адмін-панелі');
+    navigateTo('/');
+  };
+
+  const getSelectedPlayerTeams = () => {
+    if (!selectedPlayerName || !selectedTournamentId) return [];
+    const tMatches = matches.filter(m => m.tournament_id === selectedTournamentId);
+    const myTeams = new Set();
+    tMatches.forEach(m => {
+      if (m.player1_name === selectedPlayerName) myTeams.add(m.team1_name);
+      if (m.player2_name === selectedPlayerName) myTeams.add(m.team2_name);
+    });
+    return Array.from(myTeams);
+  };
+
+  // Sync activeTab with path
+  useEffect(() => {
+    if (currentPath === '/manage-tournament-panel') {
+      setActiveTab('admin');
+    } else {
+      setActiveTab('match-center');
+    }
+  }, [currentPath]);
+
+  // Sync popstate location
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
   // Shared state
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState({}); // Grouped by league
@@ -359,6 +406,20 @@ function App() {
     }
   };
 
+  // 6c. Admin Login
+  const handleAdminLogin = (e) => {
+    e.preventDefault();
+    const expectedPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123';
+    if (adminPasswordInput === expectedPassword) {
+      setIsAdminAuthenticated(true);
+      localStorage.setItem('isAdminAuthenticated', 'true');
+      triggerSuccess('Авторизовано успішно!');
+      setAdminPasswordInput('');
+    } else {
+      triggerError('Неправильний пароль адміна!');
+    }
+  };
+
   // 7. Open match closer window
   const openCloseMatchModal = async (match) => {
     setActiveClosingMatch(match);
@@ -620,6 +681,63 @@ function App() {
   // Stats tab selection
   const [activeStatsTab, setActiveStatsTab] = useState('tables');
 
+  if (currentPath === '/manage-tournament-panel' && !isAdminAuthenticated) {
+    return (
+      <div className="min-h-screen bg-ps-dark text-gray-100 flex flex-col justify-center items-center p-6 max-w-md mx-auto relative border-x border-ps-dark-item shadow-2xl">
+        
+        {successMsg && (
+          <div className="absolute top-16 left-4 right-4 bg-ps-green/20 border border-ps-green text-ps-green px-4 py-3 rounded-lg text-xs font-semibold flex items-center gap-2 z-50 animate-bounce">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+        {error && (
+          <div className="absolute top-16 left-4 right-4 bg-ps-neon-pink/20 border border-ps-neon-pink text-white px-4 py-3 rounded-lg text-xs font-semibold flex items-center gap-2 z-50">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-ps-neon-pink" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="w-full bg-ps-dark-card border border-ps-dark-item rounded-2xl p-6 space-y-6">
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 rounded-2xl bg-ps-neon-pink/15 border border-ps-neon-pink/40 text-ps-neon-pink flex items-center justify-center mx-auto shadow-neon-pink">
+              <Settings className="w-6 h-6" />
+            </div>
+            <h2 className="font-extrabold text-sm uppercase tracking-wider text-white">Вхід до Адмін-панелі</h2>
+            <p className="text-[10px] text-gray-400">Введіть пароль адміністратора для керування турніром</p>
+          </div>
+
+          <form onSubmit={handleAdminLogin} className="space-y-4 text-xs">
+            <div>
+              <label className="block text-gray-400 font-semibold mb-1">Пароль Адміна</label>
+              <input
+                type="password"
+                value={adminPasswordInput}
+                onChange={(e) => setAdminPasswordInput(e.target.value)}
+                placeholder="Введіть пароль"
+                className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-pink transition-colors text-center font-bold"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-ps-neon-pink/20 hover:bg-ps-neon-pink border border-ps-neon-pink/45 text-ps-neon-pink hover:text-black font-bold py-3 rounded-xl transition-all shadow-neon-pink"
+            >
+              УВІЙТИ
+            </button>
+          </form>
+
+          <button
+            onClick={() => navigateTo('/')}
+            className="w-full text-center text-[10px] text-gray-400 hover:text-white transition-colors"
+          >
+            ← Повернутися на головну
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-ps-dark text-gray-100 flex flex-col max-w-md mx-auto relative border-x border-ps-dark-item shadow-2xl">
       
@@ -636,13 +754,38 @@ function App() {
             <span className="text-[10px] text-gray-400">PS5 Tournament LMS</span>
           </div>
         </div>
-        <button 
-          onClick={fetchData} 
-          disabled={loading}
-          className="p-2 rounded-full hover:bg-ps-dark-item text-ps-neon-blue transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          {currentPath !== '/manage-tournament-panel' ? (
+            <select
+              value={selectedPlayerName}
+              onChange={(e) => {
+                setSelectedPlayerName(e.target.value);
+                localStorage.setItem('selectedPlayerName', e.target.value);
+              }}
+              className="bg-ps-dark border border-ps-dark-item rounded-lg py-1.5 px-2 text-[10px] font-bold text-gray-300 focus:outline-none focus:border-ps-neon-blue transition-colors max-w-[100px]"
+            >
+              <option value="">👤 Хто ти?</option>
+              {players.map(p => (
+                <option key={p.id} value={p.name}>{p.name}</option>
+              ))}
+            </select>
+          ) : (
+            <button
+              onClick={handleAdminLogout}
+              className="px-2.5 py-1.5 rounded-lg bg-ps-neon-pink/15 border border-ps-neon-pink/30 hover:bg-ps-neon-pink text-ps-neon-pink hover:text-black text-[9px] font-bold uppercase transition-all shadow-neon-pink shrink-0"
+            >
+              Вийти
+            </button>
+          )}
+
+          <button 
+            onClick={fetchData} 
+            disabled={loading}
+            className="p-2 rounded-full hover:bg-ps-dark-item text-ps-neon-blue transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </header>
 
       {/* FLASH MESSAGES */}
@@ -656,6 +799,27 @@ function App() {
         <div className="absolute top-16 left-4 right-4 bg-ps-neon-pink/20 border border-ps-neon-pink text-white px-4 py-3 rounded-lg text-xs font-semibold flex items-center gap-2 z-50">
           <AlertTriangle className="w-4 h-4 shrink-0 text-ps-neon-pink" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* PLAYER DASHBOARD OVERLAY */}
+      {selectedPlayerName && currentPath !== '/manage-tournament-panel' && (
+        <div className="bg-ps-dark-card border-b border-ps-dark-item px-4 py-3 flex items-center justify-between gap-3 text-xs animate-slide-up">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-ps-green animate-pulse shrink-0" />
+            <div className="min-w-0">
+              <div className="font-extrabold text-white">Профіль: {selectedPlayerName}</div>
+              <div className="text-[10px] text-gray-400 truncate">
+                Команди: {getSelectedPlayerTeams().join(', ') || 'Немає активних команд'}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 bg-ps-yellow/10 border border-ps-yellow/30 px-2.5 py-1.5 rounded-lg shrink-0">
+            <span className="font-extrabold text-ps-yellow text-xs">
+              {players.find(p => p.name === selectedPlayerName)?.coins_balance ?? 0}
+            </span>
+            <span className="text-[8px] text-ps-yellow/85 uppercase font-bold tracking-wider">PSC</span>
+          </div>
         </div>
       )}
 
@@ -675,12 +839,14 @@ function App() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Список турнірів</h2>
-                  <button
-                    onClick={() => setShowCreateTournamentModal(true)}
-                    className="flex items-center gap-1 bg-ps-blue hover:bg-ps-blue/90 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg shadow-neon-blue transition-all"
-                  >
-                    <Plus className="w-3 h-3" /> Створити Турнір
-                  </button>
+                  {currentPath === '/manage-tournament-panel' && (
+                    <button
+                      onClick={() => setShowCreateTournamentModal(true)}
+                      className="flex items-center gap-1 bg-ps-blue hover:bg-ps-blue/90 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg shadow-neon-blue transition-all"
+                    >
+                      <Plus className="w-3 h-3" /> Створити Турнір
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -720,16 +886,18 @@ function App() {
                             {statusLabel}
                           </span>
                           
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteTournament(t.id);
-                            }}
-                            className="p-2 rounded-xl bg-ps-neon-pink/10 border border-ps-neon-pink/20 hover:bg-ps-neon-pink hover:text-black text-ps-neon-pink transition-all duration-300"
-                            title="Видалити турнір"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {currentPath === '/manage-tournament-panel' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTournament(t.id);
+                              }}
+                              className="p-2 rounded-xl bg-ps-neon-pink/10 border border-ps-neon-pink/20 hover:bg-ps-neon-pink hover:text-black text-ps-neon-pink transition-all duration-300"
+                              title="Видалити турнір"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -739,12 +907,14 @@ function App() {
                     <div className="text-center text-xs text-gray-500 py-12 bg-ps-dark-card border border-ps-dark-item border-dashed rounded-2xl">
                       <Gamepad2 className="w-8 h-8 mx-auto mb-2 text-gray-600" />
                       <p>Немає створених турнірів.</p>
-                      <button
-                        onClick={() => setShowCreateTournamentModal(true)}
-                        className="mt-3 text-[10px] bg-ps-blue/20 hover:bg-ps-blue text-ps-neon-blue font-bold px-4 py-2 rounded-xl transition-all"
-                      >
-                        Створити перший турнір
-                      </button>
+                      {currentPath === '/manage-tournament-panel' && (
+                        <button
+                          onClick={() => setShowCreateTournamentModal(true)}
+                          className="mt-3 text-[10px] bg-ps-blue/20 hover:bg-ps-blue text-ps-neon-blue font-bold px-4 py-2 rounded-xl transition-all"
+                        >
+                          Створити перший турнір
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -820,14 +990,16 @@ function App() {
                       </div>
                       
                       {/* Actions for Live Match */}
-                      <div className="mt-4 pt-4 border-t border-ps-dark-item flex gap-2">
-                        <button 
-                          onClick={() => openCloseMatchModal(liveMatch)}
-                          className="flex-1 bg-ps-neon-blue/10 border border-ps-neon-blue/40 hover:bg-ps-neon-blue hover:text-black text-ps-neon-blue text-xs font-bold py-2 px-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5"
-                        >
-                          <CheckCircle2 className="w-4 h-4" /> Закрити матч
-                        </button>
-                      </div>
+                      {currentPath === '/manage-tournament-panel' && (
+                        <div className="mt-4 pt-4 border-t border-ps-dark-item flex gap-2">
+                          <button 
+                            onClick={() => openCloseMatchModal(liveMatch)}
+                            className="flex-1 bg-ps-neon-blue/10 border border-ps-neon-blue/40 hover:bg-ps-neon-blue hover:text-black text-ps-neon-blue text-xs font-bold py-2 px-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5"
+                          >
+                            <CheckCircle2 className="w-4 h-4" /> Закрити матч
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : pendingMatches.length > 0 ? (
                     <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-5 relative overflow-hidden">
@@ -860,27 +1032,29 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="mt-4 pt-4 border-t border-ps-dark-item">
-                        <button 
-                          onClick={async () => {
-                            try {
-                              const res = await fetch(`${API_URL}/api/matches/${pendingMatches[0].id}`, {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ score1: null, score2: null, status: 'live' })
-                              });
-                              if (!res.ok) throw new Error('Помилка активації');
-                              triggerSuccess('Матч запущено в ефір!');
-                              fetchData();
-                            } catch (err) {
-                              triggerError(err.message);
-                            }
-                          }}
-                          className="w-full bg-ps-blue hover:bg-ps-blue/90 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-neon-blue transition-all flex items-center justify-center gap-1.5"
-                        >
-                          <Play className="w-4 h-4 fill-white" /> РОЗПОЧАТИ МАТЧ
-                        </button>
-                      </div>
+                      {currentPath === '/manage-tournament-panel' && (
+                        <div className="mt-4 pt-4 border-t border-ps-dark-item">
+                          <button 
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`${API_URL}/api/matches/${pendingMatches[0].id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ score1: null, score2: null, status: 'live' })
+                                });
+                                if (!res.ok) throw new Error('Помилка активації');
+                                triggerSuccess('Матч запущено в ефір!');
+                                fetchData();
+                              } catch (err) {
+                                triggerError(err.message);
+                              }
+                            }}
+                            className="w-full bg-ps-blue hover:bg-ps-blue/90 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-neon-blue transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <Play className="w-4 h-4 fill-white" /> РОЗПОЧАТИ МАТЧ
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="bg-ps-dark-card border border-ps-dark-item border-dashed rounded-2xl p-8 text-center text-gray-500">
@@ -915,24 +1089,26 @@ function App() {
                           </div>
                         </div>
                         
-                        <button 
-                          onClick={() => {
-                            fetch(`${API_URL}/api/matches/${match.id}`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ score1: null, score2: null, status: 'live' })
-                            })
-                            .then(() => {
-                              triggerSuccess('Матч виведено в Live!');
-                              fetchData();
-                            })
-                            .catch(err => triggerError(err.message));
-                          }}
-                          className="p-1.5 rounded-lg bg-ps-dark-item hover:bg-ps-blue text-ps-neon-blue hover:text-white transition-all shrink-0"
-                          title="Запустити"
-                        >
-                          <Play className="w-3.5 h-3.5" />
-                        </button>
+                        {currentPath === '/manage-tournament-panel' && (
+                          <button 
+                            onClick={() => {
+                              fetch(`${API_URL}/api/matches/${match.id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ score1: null, score2: null, status: 'live' })
+                              })
+                              .then(() => {
+                                triggerSuccess('Матч виведено в Live!');
+                                fetchData();
+                              })
+                              .catch(err => triggerError(err.message));
+                            }}
+                            className="p-1.5 rounded-lg bg-ps-dark-item hover:bg-ps-blue text-ps-neon-blue hover:text-white transition-all shrink-0"
+                            title="Запустити"
+                          >
+                            <Play className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     ))}
                     
@@ -1070,26 +1246,31 @@ function App() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {stats.groupStandings[groupName].map((team, idx) => (
-                                  <tr 
-                                    key={team.id} 
-                                    className={`border-b border-ps-dark-item/50 last:border-b-0 ${
-                                      idx < 2 ? 'bg-ps-blue/5' : ''
-                                    }`}
-                                  >
-                                    <td className="py-2.5 pr-2 font-bold max-w-[120px] truncate text-white">
-                                      <div className="truncate">{team.name}</div>
-                                      <div className="text-[9px] text-gray-500 font-normal truncate">{team.player_name}</div>
-                                    </td>
-                                    <td className="py-2.5 text-center font-semibold text-gray-300">{team.played}</td>
-                                    <td className="py-2.5 text-center text-gray-400 font-semibold">
-                                      {team.gd > 0 ? `+${team.gd}` : team.gd}
-                                    </td>
-                                    <td className={`py-2.5 text-center font-bold text-sm ${idx < 2 ? 'text-ps-neon-blue' : 'text-white'}`}>
-                                      {team.points}
-                                    </td>
-                                  </tr>
-                                ))}
+                                {stats.groupStandings[groupName].map((team, idx) => {
+                                  const isMyTeam = team.player_name === selectedPlayerName;
+                                  return (
+                                    <tr 
+                                      key={team.id} 
+                                      className={`border-b border-ps-dark-item/50 last:border-b-0 transition-all ${
+                                        isMyTeam 
+                                          ? 'bg-ps-blue/20 border-l-2 border-l-ps-neon-blue' 
+                                          : (idx < 2 ? 'bg-ps-blue/5' : '')
+                                      }`}
+                                    >
+                                      <td className="py-2.5 pr-2 font-bold max-w-[120px] truncate text-white">
+                                        <div className="truncate">{team.name}</div>
+                                        <div className="text-[9px] text-gray-500 font-normal truncate">{team.player_name}</div>
+                                      </td>
+                                      <td className="py-2.5 text-center font-semibold text-gray-300">{team.played}</td>
+                                      <td className="py-2.5 text-center text-gray-400 font-semibold">
+                                        {team.gd > 0 ? `+${team.gd}` : team.gd}
+                                      </td>
+                                      <td className={`py-2.5 text-center font-bold text-sm ${idx < 2 ? 'text-ps-neon-blue' : 'text-white'}`}>
+                                        {team.points}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>
@@ -1208,23 +1389,35 @@ function App() {
                     
                     <div className="space-y-2.5">
                       {stats?.coinsLeaderboard && stats.coinsLeaderboard.length > 0 ? (
-                        stats.coinsLeaderboard.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between border-b border-ps-dark-item/50 pb-2.5 last:border-b-0 text-xs">
-                            <div className="flex items-center gap-2.5">
-                              <div className={`w-6 h-6 rounded-full font-bold flex items-center justify-center text-xs ${
-                                idx === 0 ? 'bg-ps-yellow text-black' : 'bg-ps-dark-item text-gray-400'
-                              }`}>
-                                {idx + 1}
+                        stats.coinsLeaderboard.map((item, idx) => {
+                          const isMe = item.player_name === selectedPlayerName;
+                          return (
+                            <div 
+                              key={idx} 
+                              className={`flex items-center justify-between border-b last:border-b-0 text-xs pb-2.5 transition-all ${
+                                isMe 
+                                  ? 'border-ps-yellow/45 bg-ps-yellow/10 p-2 rounded-xl border shadow-neon-yellow' 
+                                  : 'border-ps-dark-item/50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className={`w-6 h-6 rounded-full font-bold flex items-center justify-center text-xs ${
+                                  idx === 0 ? 'bg-ps-yellow text-black' : (isMe ? 'bg-ps-yellow/20 text-ps-yellow' : 'bg-ps-dark-item text-gray-400')
+                                }`}>
+                                  {idx + 1}
+                                </div>
+                                <span className={`font-bold ${isMe ? 'text-ps-yellow' : 'text-white'}`}>
+                                  {item.player_name} {isMe && <span className="text-[8px] font-extrabold uppercase bg-ps-yellow/20 px-1.5 py-0.5 rounded text-ps-yellow ml-1">Ви</span>}
+                                </span>
                               </div>
-                              <span className="font-bold text-white">{item.player_name}</span>
+                              
+                              <div className="flex items-center gap-1 bg-ps-yellow/10 border border-ps-yellow/30 px-2.5 py-1 rounded-lg">
+                                <span className="font-extrabold text-ps-yellow text-sm">{item.coins_balance}</span>
+                                <span className="text-[9px] text-ps-yellow/85 uppercase font-bold tracking-wider">PSC</span>
+                              </div>
                             </div>
-                            
-                            <div className="flex items-center gap-1 bg-ps-yellow/10 border border-ps-yellow/30 px-2.5 py-1 rounded-lg">
-                              <span className="font-extrabold text-ps-yellow text-sm">{item.coins_balance}</span>
-                              <span className="text-[9px] text-ps-yellow/85 uppercase font-bold tracking-wider">PSC</span>
-                            </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="text-center text-xs text-gray-600 py-4">Рейтинг пустий.</div>
                       )}
@@ -1239,7 +1432,7 @@ function App() {
         {/* ========================================================================= */}
         {/* TAB 3: ADMIN PANEL */}
         {/* ========================================================================= */}
-        {activeTab === 'admin' && (
+        {activeTab === 'admin' && currentPath === '/manage-tournament-panel' && (
           <div className="space-y-6">
             
             {/* 1. SQUAD ROSTER EDITOR */}
@@ -1519,7 +1712,7 @@ function App() {
         {/* ========================================================================= */}
         {/* TAB 4: BANNER GENERATOR */}
         {/* ========================================================================= */}
-        {activeTab === 'banner-gen' && (
+        {activeTab === 'banner-gen' && currentPath === '/manage-tournament-panel' && (
           <div className="space-y-6">
             
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
@@ -1981,25 +2174,29 @@ function App() {
           <span className="text-[10px]">Статистика</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('admin')}
-          className={`flex flex-col items-center gap-1 transition-all ${
-            activeTab === 'admin' ? 'text-ps-neon-blue neon-glow-text-blue font-bold scale-110' : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          <Settings className="w-5 h-5" />
-          <span className="text-[10px]">Адмінка</span>
-        </button>
+        {currentPath === '/manage-tournament-panel' && (
+          <>
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`flex flex-col items-center gap-1 transition-all ${
+                activeTab === 'admin' ? 'text-ps-neon-blue neon-glow-text-blue font-bold scale-110' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <Settings className="w-5 h-5" />
+              <span className="text-[10px]">Адмінка</span>
+            </button>
 
-        <button
-          onClick={() => setActiveTab('banner-gen')}
-          className={`flex flex-col items-center gap-1 transition-all ${
-            activeTab === 'banner-gen' ? 'text-ps-neon-blue neon-glow-text-blue font-bold scale-110' : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          <ImageIcon className="w-5 h-5" />
-          <span className="text-[10px]">Банери</span>
-        </button>
+            <button
+              onClick={() => setActiveTab('banner-gen')}
+              className={`flex flex-col items-center gap-1 transition-all ${
+                activeTab === 'banner-gen' ? 'text-ps-neon-blue neon-glow-text-blue font-bold scale-110' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <ImageIcon className="w-5 h-5" />
+              <span className="text-[10px]">Банери</span>
+            </button>
+          </>
+        )}
       </nav>
 
     </div>
