@@ -38,6 +38,7 @@ function App() {
   
   // Routing & Role states
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const [isAdminRoute, setIsAdminRoute] = useState(false);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(localStorage.getItem('isAdminAuthenticated') === 'true');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [selectedPlayerName, setSelectedPlayerName] = useState(localStorage.getItem('selectedPlayerName') || '');
@@ -45,6 +46,9 @@ function App() {
   const navigateTo = (path) => {
     window.history.pushState({}, '', path);
     setCurrentPath(path);
+    if (path === '/') {
+      window.location.hash = '';
+    }
   };
 
   const handleAdminLogout = () => {
@@ -67,21 +71,37 @@ function App() {
 
   // Sync activeTab with path
   useEffect(() => {
-    if (currentPath === '/manage-tournament-panel') {
+    if (isAdminRoute) {
       setActiveTab('admin');
     } else {
       setActiveTab('match-center');
     }
-  }, [currentPath]);
+  }, [isAdminRoute]);
 
-  // Sync popstate location
+  // Sync popstate / hash location
   useEffect(() => {
+    const checkIsAdminRoute = () => {
+      const isPath = window.location.pathname === '/manage-tournament-panel' || 
+                     window.location.hash === '#/manage-tournament-panel' || 
+                     window.location.hash === '#manage-tournament-panel' ||
+                     window.location.search.includes('manage-tournament-panel');
+      setIsAdminRoute(isPath);
+    };
+
+    checkIsAdminRoute();
+
     const handleLocationChange = () => {
       setCurrentPath(window.location.pathname);
+      checkIsAdminRoute();
     };
+
     window.addEventListener('popstate', handleLocationChange);
-    return () => window.removeEventListener('popstate', handleLocationChange);
-  }, []);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, [currentPath]);
 
   // Shared state
   const [players, setPlayers] = useState([]);
@@ -681,7 +701,7 @@ function App() {
   // Stats tab selection
   const [activeStatsTab, setActiveStatsTab] = useState('tables');
 
-  if (currentPath === '/manage-tournament-panel' && !isAdminAuthenticated) {
+  if (isAdminRoute && !isAdminAuthenticated) {
     return (
       <div className="min-h-screen bg-ps-dark text-gray-100 flex flex-col justify-center items-center p-6 max-w-md mx-auto relative border-x border-ps-dark-item shadow-2xl">
         
@@ -755,7 +775,7 @@ function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {currentPath !== '/manage-tournament-panel' ? (
+          {!isAdminRoute ? (
             <select
               value={selectedPlayerName}
               onChange={(e) => {
@@ -803,7 +823,7 @@ function App() {
       )}
 
       {/* PLAYER DASHBOARD OVERLAY */}
-      {selectedPlayerName && currentPath !== '/manage-tournament-panel' && (
+      {selectedPlayerName && !isAdminRoute && (
         <div className="bg-ps-dark-card border-b border-ps-dark-item px-4 py-3 flex items-center justify-between gap-3 text-xs animate-slide-up">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-2.5 h-2.5 rounded-full bg-ps-green animate-pulse shrink-0" />
@@ -839,7 +859,7 @@ function App() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Список турнірів</h2>
-                  {currentPath === '/manage-tournament-panel' && (
+                  {isAdminRoute && (
                     <button
                       onClick={() => setShowCreateTournamentModal(true)}
                       className="flex items-center gap-1 bg-ps-blue hover:bg-ps-blue/90 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg shadow-neon-blue transition-all"
@@ -886,7 +906,7 @@ function App() {
                             {statusLabel}
                           </span>
                           
-                          {currentPath === '/manage-tournament-panel' && (
+                          {isAdminRoute && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -907,7 +927,7 @@ function App() {
                     <div className="text-center text-xs text-gray-500 py-12 bg-ps-dark-card border border-ps-dark-item border-dashed rounded-2xl">
                       <Gamepad2 className="w-8 h-8 mx-auto mb-2 text-gray-600" />
                       <p>Немає створених турнірів.</p>
-                      {currentPath === '/manage-tournament-panel' && (
+                      {isAdminRoute && (
                         <button
                           onClick={() => setShowCreateTournamentModal(true)}
                           className="mt-3 text-[10px] bg-ps-blue/20 hover:bg-ps-blue text-ps-neon-blue font-bold px-4 py-2 rounded-xl transition-all"
@@ -990,7 +1010,7 @@ function App() {
                       </div>
                       
                       {/* Actions for Live Match */}
-                      {currentPath === '/manage-tournament-panel' && (
+                      {isAdminRoute && (
                         <div className="mt-4 pt-4 border-t border-ps-dark-item flex gap-2">
                           <button 
                             onClick={() => openCloseMatchModal(liveMatch)}
@@ -1032,7 +1052,7 @@ function App() {
                         </div>
                       </div>
 
-                      {currentPath === '/manage-tournament-panel' && (
+                      {isAdminRoute && (
                         <div className="mt-4 pt-4 border-t border-ps-dark-item">
                           <button 
                             onClick={async () => {
@@ -1089,7 +1109,7 @@ function App() {
                           </div>
                         </div>
                         
-                        {currentPath === '/manage-tournament-panel' && (
+                        {isAdminRoute && (
                           <button 
                             onClick={() => {
                               fetch(`${API_URL}/api/matches/${match.id}`, {
@@ -1432,7 +1452,7 @@ function App() {
         {/* ========================================================================= */}
         {/* TAB 3: ADMIN PANEL */}
         {/* ========================================================================= */}
-        {activeTab === 'admin' && currentPath === '/manage-tournament-panel' && (
+        {activeTab === 'admin' && isAdminRoute && (
           <div className="space-y-6">
             
             {/* 1. SQUAD ROSTER EDITOR */}
@@ -1712,7 +1732,7 @@ function App() {
         {/* ========================================================================= */}
         {/* TAB 4: BANNER GENERATOR */}
         {/* ========================================================================= */}
-        {activeTab === 'banner-gen' && currentPath === '/manage-tournament-panel' && (
+        {activeTab === 'banner-gen' && isAdminRoute && (
           <div className="space-y-6">
             
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
@@ -2174,7 +2194,7 @@ function App() {
           <span className="text-[10px]">Статистика</span>
         </button>
 
-        {currentPath === '/manage-tournament-panel' && (
+        {isAdminRoute && (
           <>
             <button
               onClick={() => setActiveTab('admin')}
