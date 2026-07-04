@@ -12,7 +12,6 @@ import {
   AlertTriangle, 
   Download, 
   Users, 
-  Layers, 
   RefreshCw,
   Coins
 } from 'lucide-react';
@@ -182,17 +181,14 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch health/players
       const playersRes = await fetch(`${API_URL}/api/players`);
       const playersData = await playersRes.json();
       setPlayers(playersData);
 
-      // 2. Fetch teams (grouped)
       const teamsRes = await fetch(`${API_URL}/api/teams`);
       const teamsData = await teamsRes.json();
       setTeams(teamsData);
 
-      // Flatten teams for quick selection/lookup
       const flat = [];
       Object.keys(teamsData).forEach(league => {
         flat.push(...teamsData[league]);
@@ -202,23 +198,19 @@ function App() {
         setSelectedTeamForPlayers(flat[0].id.toString());
       }
       
-      // Setup initial league tab
       const leagues = Object.keys(teamsData);
       if (leagues.length > 0 && !selectedLeagueTab) {
         setSelectedLeagueTab(leagues[0]);
       }
 
-      // 3. Fetch tournaments
       const tournamentsRes = await fetch(`${API_URL}/api/tournaments`);
       const tournamentsData = await tournamentsRes.json();
       setTournaments(tournamentsData);
 
-      // 4. Fetch matches
       const matchesRes = await fetch(`${API_URL}/api/matches`);
       const matchesData = await matchesRes.json();
       setMatches(matchesData);
 
-      // 5. Fetch stats
       const statsRes = await fetch(selectedTournamentId ? `${API_URL}/api/stats?tournament_id=${selectedTournamentId}` : `${API_URL}/api/stats`);
       const statsData = await statsRes.json();
       setStats(statsData);
@@ -246,7 +238,6 @@ function App() {
     }
   }, [selectedTournamentId]);
 
-  // Fetch players for selected team in editor
   useEffect(() => {
     if (selectedTeamForPlayers) {
       fetch(`${API_URL}/api/teams/${selectedTeamForPlayers}/players`)
@@ -256,14 +247,12 @@ function App() {
     }
   }, [selectedTeamForPlayers]);
 
-  // Redraw banner when details change
   useEffect(() => {
     if (activeTab === 'banner-gen') {
       drawBanner();
     }
   }, [bannerTeam1, bannerTeam2, bannerPlayer1, bannerPlayer2, activeTab]);
 
-  // Flash message helpers
   const triggerSuccess = (msg) => {
     setSuccessMsg(msg);
     setTimeout(() => setSuccessMsg(null), 4000);
@@ -274,11 +263,7 @@ function App() {
     setTimeout(() => setError(null), 5000);
   };
 
-  // =========================================================================
   // ACTIONS
-  // =========================================================================
-
-  // 1. Create team
   const handleCreateTeam = async (e) => {
     e.preventDefault();
     if (!newTeamName) return triggerError('Введіть назву команди');
@@ -319,7 +304,6 @@ function App() {
     }
   };
 
-  // 2. Add player to team roster
   const handleAddPlayerToRoster = async (e) => {
     e.preventDefault();
     if (!newPlayerRosterName || !selectedTeamForPlayers) return;
@@ -341,7 +325,6 @@ function App() {
     }
   };
 
-  // 3. Delete player from roster
   const handleDeletePlayerFromRoster = async (playerId) => {
     try {
       const res = await fetch(`${API_URL}/api/team-players/${playerId}`, {
@@ -355,7 +338,6 @@ function App() {
     }
   };
 
-  // 4. Delete team
   const handleDeleteTeam = async (teamId) => {
     if (!window.confirm('Ви впевнені, що хочете видалити команду? Склад команди буде видалено каскадно.')) return;
     try {
@@ -371,7 +353,6 @@ function App() {
     }
   };
 
-  // 5. Select team in tournament builder
   const toggleTeamSelection = (teamId) => {
     const limit = tourneyPlayers.length * tourneyN;
     if (selectedTeamIds.includes(teamId)) {
@@ -385,7 +366,6 @@ function App() {
     }
   };
 
-  // 6. Generate Tournament
   const handleGenerateTournament = async () => {
     const limit = tourneyPlayers.length * tourneyN;
     if (!tournamentName) return triggerError('Введіть назву турніру');
@@ -422,7 +402,6 @@ function App() {
     }
   };
 
-  // 6b. Delete Tournament
   const handleDeleteTournament = async (tournamentId) => {
     if (!window.confirm('Ви впевнені, що хочете видалити цей турнір? Всі матчі та результати будуть назавжди видалені.')) return;
     setLoading(true);
@@ -444,7 +423,6 @@ function App() {
     }
   };
 
-  // 6c. Admin Login
   const handleAdminLogin = (e) => {
     e.preventDefault();
     const expectedPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123';
@@ -458,7 +436,6 @@ function App() {
     }
   };
 
-  // 6d. Register human player
   const handleRegisterPlayer = async (e) => {
     e.preventDefault();
     if (!newPlayerName.trim()) return triggerError('Введіть ім\'я гравця');
@@ -481,7 +458,6 @@ function App() {
     }
   };
 
-  // 6e. Delete human player
   const handleDeletePlayer = async (playerId, playerName) => {
     if (!window.confirm(`Ви дійсно хочете видалити гравця "${playerName}"? Всі його баланси коїнів, закріплені команди та матчі буде видалено назавжди!`)) return;
     setLoading(true);
@@ -504,7 +480,6 @@ function App() {
     }
   };
 
-  // 7. Open match closer window
   const openCloseMatchModal = async (match) => {
     setActiveClosingMatch(match);
     setScore1(0);
@@ -514,7 +489,6 @@ function App() {
     setPlayer2Advanced(false);
 
     try {
-      // Fetch squads for both competing teams
       const [squad1Res, squad2Res] = await Promise.all([
         fetch(`${API_URL}/api/teams/${match.team1_id}/players`),
         fetch(`${API_URL}/api/teams/${match.team2_id}/players`)
@@ -528,7 +502,6 @@ function App() {
     }
   };
 
-  // 8. Add goal row in modal
   const addGoalRow = (teamId) => {
     setMatchGoals([...matchGoals, { team_id: teamId, scorer_id: '', assistant_id: '', minute: '' }]);
   };
@@ -543,12 +516,10 @@ function App() {
     setMatchGoals(matchGoals.filter((_, i) => i !== index));
   };
 
-  // 9. Submit match score
   const handleSubmitMatchResult = async (e) => {
     e.preventDefault();
     if (!activeClosingMatch) return;
 
-    // Validate goals (ensure scorer is selected)
     for (const g of matchGoals) {
       if (!g.scorer_id) {
         return triggerError('Для кожного забитого голу необхідно вказати автора!');
@@ -582,7 +553,6 @@ function App() {
     }
   };
 
-  // 10. Transfer playoff team control
   const handleTransferPlayoffTeam = async (e) => {
     e.preventDefault();
     if (!transferMatchId || !transferTeamId || !transferNewPlayerId) {
@@ -615,30 +585,25 @@ function App() {
     }
   };
 
-  // 11. Draw match banner to Canvas
   const drawBanner = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    // Set Dimensions (perfect 16:9 ratio for mobile sharing)
     canvas.width = 800;
     canvas.height = 450;
 
-    // Background Radial Gradient
     const gradient = ctx.createRadialGradient(400, 225, 50, 400, 225, 450);
     gradient.addColorStop(0, '#131520');
     gradient.addColorStop(1, '#08090e');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 800, 450);
 
-    // PlayStation blue glow stripe on left, magenta glow stripe on right
     ctx.fillStyle = 'rgba(0, 111, 205, 0.2)';
     ctx.fillRect(0, 0, 10, 450);
     ctx.fillStyle = 'rgba(255, 0, 127, 0.2)';
     ctx.fillRect(790, 0, 10, 450);
 
-    // Playstation grid background decoration
     ctx.strokeStyle = 'rgba(0, 240, 255, 0.03)';
     ctx.lineWidth = 1;
     for (let i = 40; i < 800; i += 40) {
@@ -648,39 +613,31 @@ function App() {
       ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(800, i); ctx.stroke();
     }
 
-    // PlayStation Symbols decoration (Cross, Circle, Triangle, Square) in corners
     ctx.lineWidth = 3;
-    
-    // Triangle (Top-Left)
     ctx.strokeStyle = 'rgba(0, 255, 136, 0.1)';
     ctx.beginPath();
     ctx.moveTo(80, 50); ctx.lineTo(120, 110); ctx.lineTo(40, 110);
     ctx.closePath(); ctx.stroke();
 
-    // Circle (Bottom-Left)
     ctx.strokeStyle = 'rgba(255, 0, 127, 0.1)';
     ctx.beginPath();
     ctx.arc(80, 360, 30, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Square (Top-Right)
     ctx.strokeStyle = 'rgba(255, 204, 0, 0.1)';
     ctx.strokeRect(680, 50, 50, 50);
 
-    // Cross (Bottom-Right)
     ctx.strokeStyle = 'rgba(0, 240, 255, 0.1)';
     ctx.beginPath();
     ctx.moveTo(680, 340); ctx.lineTo(730, 390);
     ctx.moveTo(730, 340); ctx.lineTo(680, 390);
     ctx.stroke();
 
-    // Tournament Subheader
     ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
     ctx.font = 'bold 13px Outfit, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('PS5 CYBERFOOTBALL CHAMPIONSHIP', 400, 60);
 
-    // Match Card box
     ctx.fillStyle = 'rgba(18, 20, 31, 0.7)';
     ctx.strokeStyle = 'rgba(0, 240, 255, 0.2)';
     ctx.lineWidth = 1;
@@ -689,37 +646,31 @@ function App() {
     ctx.fill();
     ctx.stroke();
 
-    // VS Text in center
     ctx.fillStyle = '#00f0ff';
     ctx.font = '800 54px Outfit, sans-serif';
     ctx.shadowColor = 'rgba(0, 240, 255, 0.6)';
     ctx.shadowBlur = 10;
     ctx.fillText('VS', 400, 230);
-    ctx.shadowBlur = 0; // reset
+    ctx.shadowBlur = 0;
 
-    // Team 1 Name (Left)
     ctx.textAlign = 'right';
     ctx.fillStyle = '#ffffff';
     ctx.font = '800 32px Outfit, sans-serif';
     ctx.fillText(bannerTeam1.toUpperCase(), 340, 210);
 
-    // Player 1 Name (Left)
     ctx.fillStyle = '#00f0ff';
     ctx.font = '600 18px Outfit, sans-serif';
     ctx.fillText(bannerPlayer1, 340, 245);
 
-    // Team 2 Name (Right)
     ctx.textAlign = 'left';
     ctx.fillStyle = '#ffffff';
     ctx.font = '800 32px Outfit, sans-serif';
     ctx.fillText(bannerTeam2.toUpperCase(), 460, 210);
 
-    // Player 2 Name (Right)
     ctx.fillStyle = '#ff007f';
     ctx.font = '600 18px Outfit, sans-serif';
     ctx.fillText(bannerPlayer2, 460, 245);
 
-    // Footer Text
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
     ctx.font = '12px Outfit, sans-serif';
@@ -747,28 +698,15 @@ function App() {
     link.click();
   };
 
-  // =========================================================================
-  // RENDER HELPERS
-  // =========================================================================
+  const liveMatch = selectedTournamentId ? matches.find(m => m.tournament_id === selectedTournamentId && m.status === 'live') : null;
+  const pendingMatches = selectedTournamentId ? matches.filter(m => m.tournament_id === selectedTournamentId && m.status === 'pending') : [];
+  const completedMatches = selectedTournamentId ? matches.filter(m => m.tournament_id === selectedTournamentId && m.status === 'completed') : [];
 
-  // Live Match
-  const liveMatch = selectedTournamentId 
-    ? matches.find(m => m.tournament_id === selectedTournamentId && m.status === 'live') 
-    : null;
-  const pendingMatches = selectedTournamentId 
-    ? matches.filter(m => m.tournament_id === selectedTournamentId && m.status === 'pending') 
-    : [];
-  const completedMatches = selectedTournamentId 
-    ? matches.filter(m => m.tournament_id === selectedTournamentId && m.status === 'completed') 
-    : [];
-
-  // Stats tab selection
   const [activeStatsTab, setActiveStatsTab] = useState('tables');
 
   if (isAdminRoute && !isAdminAuthenticated) {
     return (
       <div className="min-h-screen bg-ps-dark text-gray-100 flex flex-col justify-center items-center p-6 max-w-md mx-auto relative border-x border-ps-dark-item shadow-2xl">
-        
         {successMsg && (
           <div className="absolute top-16 left-4 right-4 bg-ps-green/20 border border-ps-green text-ps-green px-4 py-3 rounded-lg text-xs font-semibold flex items-center gap-2 z-50 animate-bounce">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -824,8 +762,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-ps-dark text-gray-100 flex flex-col max-w-md mx-auto relative border-x border-ps-dark-item shadow-2xl">
-      
-      {/* HEADER */}
       <header className="sticky top-0 bg-ps-dark-card border-b border-ps-dark-item p-4 flex items-center justify-between z-10">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-ps-blue flex items-center justify-center font-bold text-white shadow-neon-blue">
@@ -872,7 +808,6 @@ function App() {
         </div>
       </header>
 
-      {/* FLASH MESSAGES */}
       {successMsg && (
         <div className="absolute top-16 left-4 right-4 bg-ps-green/20 border border-ps-green text-ps-green px-4 py-3 rounded-lg text-xs font-semibold flex items-center gap-2 z-50 animate-bounce">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -886,7 +821,6 @@ function App() {
         </div>
       )}
 
-      {/* PLAYER DASHBOARD OVERLAY */}
       {selectedPlayerName && !isAdminRoute && (
         <div className="bg-ps-dark-card border-b border-ps-dark-item px-4 py-3 flex items-center justify-between gap-3 text-xs animate-slide-up">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -907,19 +841,10 @@ function App() {
         </div>
       )}
 
-      {/* MAIN CONTAINER */}
       <main className="flex-1 p-4 pb-24 overflow-y-auto">
-        
-        {/* ========================================================================= */}
-        {/* TAB 1: MATCH CENTER */}
-        {/* ========================================================================= */}
-        {/* ========================================================================= */}
-        {/* TAB 1: MATCH CENTER & TOURNAMENTS LIST */}
-        {/* ========================================================================= */}
         {activeTab === 'match-center' && (
           <div className="space-y-6">
             {selectedTournamentId === null ? (
-              // 1. TOURNAMENTS LIST VIEW
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Список турнірів</h2>
@@ -1004,9 +929,7 @@ function App() {
                 </div>
               </div>
             ) : (
-              // 2. TOURNAMENT MATCH CENTER DETAILS
               <div className="space-y-6">
-                {/* Back button and title */}
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => {
@@ -1027,7 +950,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* NOW PLAYING BILLBOARD */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Зараз Грають</h2>
@@ -1047,7 +969,6 @@ function App() {
                       </div>
 
                       <div className="grid grid-cols-5 items-center gap-2">
-                        {/* Team 1 */}
                         <div className="col-span-2 text-center">
                           <div className="w-12 h-12 mx-auto rounded-xl bg-ps-blue/20 border border-ps-blue/40 flex items-center justify-center font-bold text-white text-lg mb-2 overflow-hidden">
                             {liveMatch.team1_flag_code ? (
@@ -1067,14 +988,12 @@ function App() {
                           <p className="text-[10px] text-gray-400 mt-0.5 truncate">{liveMatch.player1_name}</p>
                         </div>
 
-                        {/* Score */}
                         <div className="col-span-1 text-center">
                           <div className="font-extrabold text-2xl text-ps-neon-blue neon-glow-text-blue">
                             {liveMatch.score1 !== null ? liveMatch.score1 : 0} : {liveMatch.score2 !== null ? liveMatch.score2 : 0}
                           </div>
                         </div>
 
-                        {/* Team 2 */}
                         <div className="col-span-2 text-center">
                           <div className="w-12 h-12 mx-auto rounded-xl bg-ps-neon-pink/20 border border-ps-neon-pink/40 flex items-center justify-center font-bold text-white text-lg mb-2 overflow-hidden">
                             {liveMatch.team2_flag_code ? (
@@ -1095,12 +1014,11 @@ function App() {
                         </div>
                       </div>
                       
-                      {/* Actions for Live Match */}
                       {isAdminRoute && (
                         <div className="mt-4 pt-4 border-t border-ps-dark-item flex gap-2">
                           <button 
                             onClick={() => openCloseMatchModal(liveMatch)}
-                            className="flex-1 bg-ps-neon-blue/10 border border-ps-neon-blue/40 hover:bg-ps-neon-blue hover:text-black text-ps-neon-blue text-xs font-bold py-2 px-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5"
+                            className="w-full bg-ps-neon-blue/10 border border-ps-neon-blue/40 hover:bg-ps-neon-blue hover:text-black text-ps-neon-blue text-xs font-bold py-2 px-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5"
                           >
                             <CheckCircle2 className="w-4 h-4" /> Закрити матч
                           </button>
@@ -1114,7 +1032,6 @@ function App() {
                       </div>
 
                       <div className="grid grid-cols-5 items-center gap-2">
-                        {/* Team 1 */}
                         <div className="col-span-2 text-center opacity-70">
                           <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2 overflow-hidden">
                             {pendingMatches[0].team1_flag_code ? (
@@ -1134,12 +1051,10 @@ function App() {
                           <p className="text-[10px] text-gray-400 mt-0.5 truncate">{pendingMatches[0].player1_name}</p>
                         </div>
 
-                        {/* VS */}
                         <div className="col-span-1 text-center">
                           <div className="font-extrabold text-lg text-gray-500">VS</div>
                         </div>
 
-                        {/* Team 2 */}
                         <div className="col-span-2 text-center opacity-70">
                           <div className="w-12 h-12 mx-auto rounded-xl bg-ps-dark-item border border-ps-dark-item flex items-center justify-center font-bold text-gray-400 text-lg mb-2 overflow-hidden">
                             {pendingMatches[0].team2_flag_code ? (
@@ -1192,7 +1107,6 @@ function App() {
                   )}
                 </div>
 
-                {/* NEXT IN LINE (QUEUE) */}
                 <div>
                   <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Наступні в черзі</h2>
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -1254,7 +1168,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* MATCH HISTORY */}
                 <div>
                   <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Історія матчів</h2>
                   <div className="space-y-2">
@@ -1268,7 +1181,6 @@ function App() {
                         </div>
 
                         <div className="grid grid-cols-7 items-center gap-1 text-xs">
-                          {/* Team 1 */}
                           <div className="col-span-2 text-right truncate">
                             <span className="font-bold text-white flex items-center justify-end gap-1 truncate">
                               <span>{match.team1_name}</span>
@@ -1277,7 +1189,6 @@ function App() {
                             <span className="text-[9px] text-gray-400 block truncate">{match.player1_name}</span>
                           </div>
                           
-                          {/* Score */}
                           <div className="col-span-3 text-center flex items-center justify-center gap-2">
                             <div className="px-2 py-0.5 rounded bg-ps-dark-item border border-ps-dark-item font-extrabold text-white">
                               {match.score1}
@@ -1288,7 +1199,6 @@ function App() {
                             </div>
                           </div>
 
-                          {/* Team 2 */}
                           <div className="col-span-2 text-left truncate">
                             <span className="font-bold text-white flex items-center justify-start gap-1 truncate">
                               {renderTeamFlag(match.team2_flag_code)}
@@ -1312,9 +1222,6 @@ function App() {
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* TAB 2: STATS & STANDINGS */}
-        {/* ========================================================================= */}
         {activeTab === 'stats' && (
           <div className="space-y-6">
             {selectedTournamentId === null ? (
@@ -1331,7 +1238,6 @@ function App() {
               </div>
             ) : (
               <>
-                {/* SUB-TABS */}
                 <div className="flex border-b border-ps-dark-item p-0.5 bg-ps-dark-card rounded-xl">
                   <button
                     onClick={() => setActiveStatsTab('tables')}
@@ -1365,7 +1271,6 @@ function App() {
                   </button>
                 </div>
 
-                {/* TAB: TABLES & STANDINGS */}
                 {activeStatsTab === 'tables' && (
                   <div className="space-y-6">
                     {stats?.groupStandings && Object.keys(stats.groupStandings).length > 0 ? (
@@ -1384,7 +1289,7 @@ function App() {
                                   <th className="py-1.5 font-bold text-center w-8">РМ</th>
                                   <th className="py-1.5 font-bold text-center w-8">О</th>
                                 </tr>
-                              </thead>
+                              </table>
                               <tbody>
                                 {stats.groupStandings[groupName].map((team, idx) => {
                                   const isMyTeam = team.player_name === selectedPlayerName;
@@ -1426,12 +1331,6 @@ function App() {
                         stageMap[m.stage].push(m);
                       });
                       const stages = Object.keys(stageMap);
-                      if (stages.length > 0 && (!activePlayoffStageTab || !stages.includes(activePlayoffStageTab))) {
-                        // Avoid infinite loops inside render: set state asynchronously or immediately
-                        // By returning a closure and setting it on the next tick, or just using local selection if not set yet
-                        // Let's use local select fallback so we don't cause React setstate loops!
-                      }
-                      
                       const selectedStage = (stages.includes(activePlayoffStageTab)) ? activePlayoffStageTab : stages[0];
 
                       return (
@@ -1442,7 +1341,6 @@ function App() {
                             </h3>
                           </div>
 
-                          {/* Stage horizontal tabs */}
                           {stages.length > 1 && (
                             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-ps-dark-item/50">
                               {stages.map(stg => (
@@ -1499,10 +1397,8 @@ function App() {
                   </div>
                 )}
 
-                {/* TAB: SCORERS & ASSISTANTS */}
                 {activeStatsTab === 'scorers' && (
                   <div className="grid grid-cols-1 gap-6">
-                    {/* Scorers */}
                     <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
                       <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue mb-3">
                         ⚽ Золота Бутса (Бомбардири)
@@ -1536,7 +1432,6 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Assistants */}
                     <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
                       <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-pink mb-3">
                         🎯 Кращі Асистенти
@@ -1572,7 +1467,6 @@ function App() {
                   </div>
                 )}
 
-                {/* TAB: COINS LEADERBOARD */}
                 {activeStatsTab === 'coins' && (
                   <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4">
                     <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-yellow mb-3 flex items-center gap-1.5">
@@ -1621,16 +1515,11 @@ function App() {
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* TAB 3: ADMIN PANEL */}
-        {/* ========================================================================= */}
         {activeTab === 'admin' && isAdminRoute && (
           <div className="space-y-6">
-            
-            {/* 1. SQUAD ROSTER EDITOR */}
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-pink flex items-center gap-1">
-                <Edit3 className="w-4 h-4 text-ps-neon-pink" /> Редагування Складів Команд
+                <Edit3 className="w-4 h-4 text-ps-neon Pink" /> Редагування Складів Команд
               </h3>
 
               <div className="space-y-3 text-xs">
@@ -1647,7 +1536,6 @@ function App() {
                   </select>
                 </div>
 
-                {/* Add footballer */}
                 <form onSubmit={handleAddPlayerToRoster} className="flex gap-2">
                   <input
                     type="text"
@@ -1664,7 +1552,6 @@ function App() {
                   </button>
                 </form>
 
-                {/* Roster list */}
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                   {teamPlayersList.map(player => (
                     <div key={player.id} className="bg-ps-dark border border-ps-dark-item rounded-xl p-2.5 flex items-center justify-between gap-2">
@@ -1685,7 +1572,6 @@ function App() {
                   )}
                 </div>
 
-                {/* Delete entire team */}
                 <button
                   type="button"
                   onClick={() => handleDeleteTeam(selectedTeamForPlayers)}
@@ -1696,7 +1582,6 @@ function App() {
               </div>
             </div>
 
-            {/* 2. CREATE TEAM FORM */}
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-white flex items-center gap-1">
                 <Plus className="w-4 h-4 text-white" /> Створення нової команди
@@ -1742,7 +1627,6 @@ function App() {
                   />
                 </div>
 
-                {/* Ratings sliders */}
                 <div className="space-y-2 bg-ps-dark p-3 rounded-xl border border-ps-dark-item">
                   <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Характеристики команди</div>
                   
@@ -1795,7 +1679,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Comma separated roster */}
                 <div>
                   <label className="block text-gray-400 font-semibold mb-1">Склад футболістів (через кому)</label>
                   <textarea
@@ -1815,13 +1698,11 @@ function App() {
               </form>
             </div>
 
-            {/* 2b. MANAGE HUMAN PLAYERS */}
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-ps-neon-blue" /> Керування Гравцями (Франшизами)
               </h3>
 
-              {/* Add human player */}
               <form onSubmit={handleRegisterPlayer} className="space-y-3 text-xs">
                 <div>
                   <label className="block text-gray-400 font-semibold mb-1">Новий гравець (ім'я)</label>
@@ -1844,7 +1725,6 @@ function App() {
                 </div>
               </form>
 
-              {/* List players with delete button */}
               <div className="space-y-2 pt-2 border-t border-ps-dark-item/50">
                 <label className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">Список учасників</label>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
@@ -1874,7 +1754,6 @@ function App() {
             </div>
 
             {/* 3. CONFLICT RESOLUTION (PLAYOFF TEAM OWNER TRANSFER) */}
-            {/* 3. CONFLICT RESOLUTION (PLAYOFF TEAM OWNER TRANSFER) */}
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-yellow flex items-center gap-1">
                 <AlertTriangle className="w-4 h-4 text-ps-yellow" /> Вирішення конфліктів у плей-оф
@@ -1885,7 +1764,6 @@ function App() {
               </p>
 
               <div className="space-y-4 text-xs">
-                {/* Вибір турніру */}
                 <div>
                   <label className="block text-gray-400 font-semibold mb-1">Оберіть турнір</label>
                   <select
@@ -1905,7 +1783,6 @@ function App() {
                   </select>
                 </div>
 
-                {/* Список матчів турніру у вигляді інтерактивних карток */}
                 {resolverTournamentId && (
                   <div className="space-y-2">
                     <label className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Матчі стадії плей-оф</label>
@@ -1913,7 +1790,6 @@ function App() {
                       {matches
                         .filter(m => m.tournament_id === parseInt(resolverTournamentId) && m.status === 'pending' && !m.stage.includes('Група'))
                         .map(m => {
-                          // Конфлікт виникає, якщо один і той самий гравець записаний за обидві команди в матчі
                           const isConflict = m.player1_name === m.player2_name;
                           const isSelected = parseInt(transferMatchId) === m.id;
 
@@ -1961,10 +1837,9 @@ function App() {
                   </div>
                 )}
 
-                {/* Блок налаштування передачі (з'являється, тільки коли матч обрано) ytpyf */}
                 {transferMatchId && (
                   <div className="bg-ps-dark p-3 rounded-xl border border-ps-dark-item space-y-3 animate-slide-up">
-                    <div className="text-[10px] uppercase font-bold text-ps-yellow tracking-wider">Налаштування передачі контролю!</div>
+                    <div className="text-[10px] uppercase font-bold text-ps-yellow tracking-wider">Налаштування передачі контролю</div>
                     
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -1997,10 +1872,8 @@ function App() {
                           <option value="">-- Вільний гравець --</option>
                           {players
                             .filter(p => {
-                              // За бажанням тут можна відфільтрувати суто вільних гравців, але поки виведемо всіх для гнучкості адміна
                               const m = matches.find(x => x.id === parseInt(transferMatchId));
                               if (!m) return true;
-                              // Ховаємо того, хто і так грає в цьому матчі, щоб не передати йому ж його ж команду
                               return p.name !== m.player1_name;
                             })
                             .map(p => (
@@ -2022,20 +1895,17 @@ function App() {
                 )}
               </div>
             </div>
+          </div>
+        )}
 
-        {/* ========================================================================= */}
-        {/* TAB 4: BANNER GENERATOR */}
-        {/* ========================================================================= */}
         {activeTab === 'banner-gen' && isAdminRoute && (
           <div className="space-y-6">
-            
             <div className="bg-ps-dark-card border border-ps-dark-item rounded-2xl p-4 space-y-4">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-ps-neon-blue flex items-center gap-1.5">
                 <ImageIcon className="w-4 h-4 text-ps-neon-blue" /> Генератор банерів матчів
               </h3>
 
               <div className="space-y-3 text-xs">
-                {/* Autopopulate from pending match */}
                 <div>
                   <label className="block text-gray-400 font-semibold mb-1">Автовведення з черги матчів</label>
                   <select
@@ -2052,7 +1922,6 @@ function App() {
                   </select>
                 </div>
 
-                {/* Team 1 details */}
                 <div className="grid grid-cols-2 gap-2 bg-ps-dark p-3 rounded-xl border border-ps-dark-item">
                   <div className="col-span-2 text-[10px] uppercase font-bold text-ps-neon-blue tracking-wider">Команда 1 (Ліва)</div>
                   <div>
@@ -2071,7 +1940,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Team 2 details */}
                 <div className="grid grid-cols-2 gap-2 bg-ps-dark p-3 rounded-xl border border-ps-dark-item">
                   <div className="col-span-2 text-[10px] uppercase font-bold text-ps-neon-pink tracking-wider">Команда 2 (Права)</div>
                   <div>
@@ -2082,7 +1950,7 @@ function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-400 text-[10px] mb-0.5">Власник (Гравець)</label>
+                    <label className="block text-gray-400 text-[10px] mb-0.5">Власник (Gradets)</label>
                     <input
                       type="text" value={bannerPlayer2} onChange={(e) => setBannerPlayer2(e.target.value)}
                       className="w-full bg-ps-dark-card border border-ps-dark-item rounded-lg py-1.5 px-2 text-white text-xs"
@@ -2090,7 +1958,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Canvas preview */}
                 <div>
                   <label className="block text-gray-400 font-semibold mb-2">Передогляд банера (800x450)</label>
                   <div className="w-full border border-ps-dark-item rounded-2xl overflow-hidden aspect-video bg-black flex items-center justify-center">
@@ -2101,7 +1968,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Download button */}
                 <button
                   type="button"
                   onClick={downloadBannerImage}
@@ -2111,19 +1977,13 @@ function App() {
                 </button>
               </div>
             </div>
-
           </div>
         )}
-
       </main>
 
-      {/* ========================================================================= */}
-      {/* WINDOW CLOSING MATCH MODAL */}
-      {/* ========================================================================= */}
       {activeClosingMatch && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end justify-center p-4">
           <div className="bg-ps-dark-card border border-ps-dark-item rounded-t-3xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up">
-            
             <div className="flex items-center justify-between border-b border-ps-dark-item pb-3">
               <div>
                 <h3 className="font-extrabold text-sm text-white">Внесення результату</h3>
@@ -2138,8 +1998,6 @@ function App() {
             </div>
 
             <form onSubmit={handleSubmitMatchResult} className="space-y-4 text-xs">
-              
-              {/* Score input grid */}
               <div className="grid grid-cols-7 items-center text-center bg-ps-dark p-4 rounded-2xl border border-ps-dark-item">
                 <div className="col-span-2">
                   <div className="font-extrabold text-sm text-white truncate mb-1">{activeClosingMatch.team1_name}</div>
@@ -2160,7 +2018,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Goals protocol tracker */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Протокол голів матчу</label>
@@ -2180,18 +2037,15 @@ function App() {
                   </div>
                 </div>
 
-                {/* Goals rows */}
                 <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                   {matchGoals.map((g, idx) => {
                     const isTeam1Goal = g.team_id === activeClosingMatch.team1_id;
                     const squad = isTeam1Goal ? competingPlayers.team1 : competingPlayers.team2;
-                    const opponentSquad = isTeam1Goal ? competingPlayers.team2 : competingPlayers.team1; // assist could theoretically be an own goal? Let's use same squad for normal assist
 
                     return (
                       <div key={idx} className="flex gap-1.5 items-center bg-ps-dark p-2 rounded-xl border border-ps-dark-item">
                         <span className={`w-2 h-2 rounded-full shrink-0 ${isTeam1Goal ? 'bg-ps-blue shadow-neon-blue' : 'bg-ps-neon-pink shadow-neon-pink'}`}></span>
                         
-                        {/* Scorer select */}
                         <select
                           value={g.scorer_id}
                           onChange={(e) => updateGoalRow(idx, 'scorer_id', e.target.value)}
@@ -2203,7 +2057,6 @@ function App() {
                           ))}
                         </select>
 
-                        {/* Assistant select */}
                         <select
                           value={g.assistant_id}
                           onChange={(e) => updateGoalRow(idx, 'assistant_id', e.target.value)}
@@ -2215,7 +2068,6 @@ function App() {
                           ))}
                         </select>
 
-                        {/* Minute */}
                         <input
                           type="number" placeholder="Хв" min="1" max="120" value={g.minute}
                           onChange={(e) => updateGoalRow(idx, 'minute', e.target.value)}
@@ -2239,7 +2091,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Playoff advancement options (Optional for final rounds) */}
               {activeClosingMatch.stage.includes('Playoff') && (
                 <div className="bg-ps-dark p-3 rounded-2xl border border-ps-dark-item space-y-2">
                   <label className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block mb-1">Вихід у наступний раунд (+50 коїнів)</label>
@@ -2264,7 +2115,6 @@ function App() {
                 </div>
               )}
 
-              {/* Submit result */}
               <button
                 type="submit"
                 disabled={loading}
@@ -2277,11 +2127,9 @@ function App() {
         </div>
       )}
 
-      {/* TOURNAMENT CONSTRUCTOR MODAL */}
       {showCreateTournamentModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end justify-center p-4">
           <div className="bg-ps-dark-card border border-ps-dark-item rounded-t-3xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up">
-            
             <div className="flex items-center justify-between border-b border-ps-dark-item pb-3">
               <div>
                 <h3 className="font-extrabold text-sm text-white">Новий турнір</h3>
@@ -2296,19 +2144,17 @@ function App() {
             </div>
 
             <div className="space-y-3 text-xs">
-              {/* Title */}
               <div>
                 <label className="block text-gray-400 font-semibold mb-1">Назва турніру</label>
                 <input
                   type="text"
                   value={tournamentName}
                   onChange={(e) => setTournamentName(e.target.value)}
-                  placeholder="Напр. Осінній Кубок 2026"
+                  placeholder="Напр. Кубок Ліги 2026"
                   className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
                 />
               </div>
 
-              {/* Players List with Add/Remove */}
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-gray-400 font-semibold">Гравці турніру ({tourneyPlayers.length})</label>
@@ -2316,7 +2162,7 @@ function App() {
                     type="button"
                     onClick={() => {
                       setTourneyPlayers([...tourneyPlayers, `Гравець ${tourneyPlayers.length + 1}`]);
-                      setSelectedTeamIds([]); // Clear selection since limit changed
+                      setSelectedTeamIds([]);
                     }}
                     className="text-[10px] bg-ps-blue/15 border border-ps-blue/40 text-ps-neon-blue font-bold px-2.5 py-1 rounded-lg hover:bg-ps-blue hover:text-white transition-all"
                   >
@@ -2336,14 +2182,14 @@ function App() {
                           setTourneyPlayers(updated);
                         }}
                         placeholder={`Гравець ${idx + 1}`}
-                        className="flex-1 bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors text-center font-semibold"
+                        className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors text-center font-semibold"
                       />
                       {tourneyPlayers.length > 2 && (
                         <button
                           type="button"
                           onClick={() => {
                             setTourneyPlayers(tourneyPlayers.filter((_, i) => i !== idx));
-                            setSelectedTeamIds([]); // Clear selection since limit changed
+                            setSelectedTeamIds([]);
                           }}
                           className="p-2 bg-ps-neon-pink/10 border border-ps-neon-pink/30 hover:bg-ps-neon-pink hover:text-black text-ps-neon-pink rounded-xl transition-all shrink-0"
                           title="Видалити гравця"
@@ -2356,7 +2202,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Pot size & Type */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-gray-400 font-semibold mb-1">К-ть команд на гравця (N)</label>
@@ -2364,7 +2209,7 @@ function App() {
                     value={tourneyN}
                     onChange={(e) => {
                       setTourneyN(parseInt(e.target.value));
-                      setSelectedTeamIds([]); // Clear selections
+                      setSelectedTeamIds([]);
                     }}
                     className="w-full bg-ps-dark border border-ps-dark-item rounded-xl py-2.5 px-3 text-white focus:outline-none focus:border-ps-neon-blue transition-colors"
                   >
@@ -2373,11 +2218,6 @@ function App() {
                     <option value="3">3 команди</option>
                     <option value="4">4 команди</option>
                     <option value="5">5 команд</option>
-                    <option value="6">6 команд</option>
-                    <option value="7">7 команд</option>
-                    <option value="8">8 команд</option>
-                    <option value="9">9 команд</option>
-                    <option value="10">10 команд</option>
                   </select>
                 </div>
                 
@@ -2394,7 +2234,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Team Selection Tabs */}
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="text-gray-400 font-semibold">Оберіть команди ({selectedTeamIds.length} / {tourneyPlayers.length * tourneyN})</label>
@@ -2403,7 +2242,6 @@ function App() {
                   </span>
                 </div>
 
-                {/* League tabs header */}
                 <div className="flex gap-1 overflow-x-auto pb-2 pr-1 scrollbar-thin">
                   {Object.keys(teams).map(league => (
                     <button
@@ -2421,7 +2259,6 @@ function App() {
                   ))}
                 </div>
 
-                {/* Teams Selection Grid */}
                 <div className="bg-ps-dark border border-ps-dark-item rounded-xl p-3 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto mt-2">
                   {teams[selectedLeagueTab]?.map(team => {
                     const isSelected = selectedTeamIds.includes(team.id);
@@ -2444,15 +2281,9 @@ function App() {
                       </button>
                     );
                   })}
-                  {(!teams[selectedLeagueTab] || teams[selectedLeagueTab].length === 0) && (
-                    <div className="col-span-2 text-center text-xs text-gray-600 py-4">
-                      Команд немає.
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Generate Button */}
               <button
                 type="button"
                 onClick={async () => {
@@ -2469,7 +2300,6 @@ function App() {
         </div>
       )}
 
-      {/* BOTTOM MOBILE NAVIGATION BAR */}
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-ps-dark-card border-t border-ps-dark-item flex items-center justify-around py-3 px-2 z-10 shadow-2xl">
         <button
           onClick={() => setActiveTab('match-center')}
@@ -2515,7 +2345,6 @@ function App() {
           </>
         )}
       </nav>
-
     </div>
   );
 }
